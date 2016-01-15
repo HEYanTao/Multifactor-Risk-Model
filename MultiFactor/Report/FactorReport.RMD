@@ -1,0 +1,2014 @@
+---
+title: "Multi-Factor Model Report"
+author: "HE Yantao"
+date: "Thursday, September 17, 2015"
+output: pdf_document
+---
+
+##  Notice  
+This report is written by **HE Yantao for the reference of CJ-pension**. I personally guarantee the authenticity of the data and analyzation in this report. It's an RMarkDown report generated automatically by knitr package which means anyone can rerun the code file on your own computer and gather an exactly same report as this one.(The code is set to use the most up to date data, so that if you run this code later than the generated date showed above, the data will be updated and the analyzation will be different. Right now code is set to look back for two years relative to the date you run it.) You can get the original code by emailing <1253705@tongji.edu.cn>.  
+The data in this report is sourced from Wind R API which may demands an effective account in Wind. You can apply it [here](http://www.wind.com.cn). **Notice:It's not free!**  
+Since Wind account has a limited quota in API access, running this code once may consume up to half of your monthly quota.  
+The analyzation in this report involves complicated optimization arithmetic, therefore running this code for one time will consume a normal computer up to 24 hours. **Notice:I deploy multithreading technology in code. Therefore, please be sure that your computer's CPU has at least four cores, or it has two cores and support hyper-threading.** If your computer doesn't meet the requirement, please don't try to run the code and contact <1253705@tongji.edu.cn> for further information. 
+Shall you get any problem reading this report, I am looking forward to discuss with you!
+
+\clearpage
+
+\space
+
+## Summary  
+This report studies the possibility of establishing a security selection strategy in Chinese A-share market. The aim is to find a strategy being able to provide stable yet profitable payoff in a long run.  
+In order to achieve that, an alpha factor strategy is studied in this report. It simultaneously holds positions in both stock market and stock index futures market.By holding short position in stock index future, it hedges the risk exposure of long positions held in stock share market. However, a perfect hedging leaves no profit. Therefore, this report tries to find profitable alpha factors and leave appropriate risk exposure to those factors. These discussions of alpha factors are based on the Arbitrage Pricing Theory of Stephen Rose's.  
+The first part of the report discusses factor performance. Criterion of choosing profitable alpha factors is being established and several factors are being examined by the criterion. Factor Momentum, Expectation and Value are found to be profitable and stable alpha factors. Cross-section regression and sectioned backtests are applied to examine factor performance.  
+The second part of the report establishes a security selection strategy as well as the hedging strategy. It uses an optimization model to determine the position to hold in each stock so that the portofolio's total payoff is maximized while  risk exposures are constrained within containable levels.   
+
+
+## Basic asumptions of this report  
+According to CAPM model, the yield of a security can be divided into two parts: the risk-free interest and the systematic risk premium. However, Merton H.Miller's studies as well as others have shown that this classification of security yield might miss something valuable. That's the alpha factors. Alpha factors, unlike beta, are not part of the general market risk. It's indications varies from stocks to stocks, and who believe in alpha believe that those factors along with beta contribute to the risk premium. To some extent, alpha is generated because of the flaw of beta. In traditional CAPM model, the only systematic risk factor is the performance of the whole market, in Fama French three factors model however, systematic factors include totalshare, book-to-market rate and evaluation level. Whatever factor excluded from systematic risk factors which does affect the stock performance is an alpha factor. They are generated because a large proportion of participants in this market act in a certain way without realizing this pattern themselves. Discovering this pattern and thus forecasting the behaviour of those investers can lead to profit. This report tries to find those alpha factors who persistently offer stable excess earnings. 
+ 
+
+
+\clearpage
+
+# Part One: The Factor Performance Report
+
+## Topic of the Factor Performance Report  
+
+This report serves as the first part of the Multi-factor Model report. It mainly discusses the characters of several factors including fundamental, financial, technical analyzation factors and so on. This report tries to answer the following questions:
+
+* How much does each factor contribute to the stock performance
+* During how many periods does each factor maintains effective
+* Is there a pattern of the factor's performance
+
+## Data Procedure
+
+* Sample space  
+This report sets the sample space to all component stocks of [CSI 800 Index](www.csindex.com.cn) *(000906.SH)* which comprehensively includes most common types of stock in Chinese stock market. This report covers all data from the first trade day in 2013. The updated sequence will be gathered in a monthly sequence.
+The data is read from the [Wind](www.wind.com.cn) database through *Wind API* for R. (May demand certain membership to access the API)
+
+* Standardization  
+In order to make different measurements with different dimensions comparable, data standardization is deployed for all observations before analyzation. There has three steps to obtain standardized and tidy data.  
+      
+      1. Deal With Missing Value  
+      In order to reduce the impact of missing values on the liability of my analyzation, I set three rules in dealing with them. First, the proportion of missing values is one of my concerns while choosing factors. I try to avoid taking in those factors whose data is hard to obtain. Second, since most of factor data is time series data, missing spaces are filled with the nearest historical data that does exist. Finally, those missing spaces with no available historical data will be remained missing in this step and being taken care of in the third step below.   
+      
+      2. Deal With Extreme Value  
+      Despite of the satisfying application of MSCI Barra Model[^1] in the use of moving smoother as a way to move extrems. I find it inevitably erasing too much of valuable information when being applied to Chinese stock markets. Therefore, I decide to simply use the straightforward triple standard difference method in order to remove extrems.  
+      
+      3. Remove dimension  
+      We divide original data into cross-section data, which means we put together all the observations from different stocks at the same timepoint and remove their dimension as a whole. The common standardization method is applied: $\frac{x-\mu}{\sigma}$. (In which $\mu$ is the mean of each cross-section data set and $\sigma$ is the standard variation of it). After this standardization, all data should has the same mean zero and a common variance of one.Those missing values being left in step one can now be filled with zero.
+\clearpage
+
+## Factors
+I divide all factors into two big categories: the industrial factors and the trait factors.  
+
+* Industrial Factors  
+Industrial factors identify a very basic feature of stocks since stocks within the same industry are widely acknowledged for their similar movements and identical reactions towards external stimulations.  
+
+* Trait Factors  
+Trait factors try to explain why certain types of stocks perform better than others during a particular time period. This report tries to point out those contributive factors and the circumstances in which they remain effective and thus deducing a guide in how to correctly use the factors.  
+
+* Evaluation Criterion Of Factors  
+
+Each factor will be judged in three ways:  
+
+1. The significance level between the factor indications and the stock performance  
+This significance level can be measured if we apply regression model to the cross-section data of a certain factor at each and every timepoint. The regression model should be a single-factor linear model with the factor indications of each stock as the independent variable and the stock performance within that period as the dependent variable. The t-value of the independent variable generated by the regression model is the significance level between the factor indications and the stock performance. And within our research, the t-value of a factor can be achieved from regressions at each timepoint and thus form a time-series sequence. The mean of that sequence may serve as the average significance level of that factor.  
+      
+2. The proportion of effective time periods  
+Since the t-value of a factor forms a time-series sequence, we can determine the proportion of times when this factor significantly affects the performance of the stock. I define "significantly affect" as the t-value at that time point exceeds two (or less then minus two).  
+      
+3. The performance of stocks with high or low factor indications  
+Within each period, I divide all stocks into five groups with the factor indications from low to high and thus generating five portofolios for each timepoint. Then I set up the strategy always picking up the same group at each period and thus generating a dynamic portofolio being changed at each time point to always hold for example, the 20% of all stocks which have the highest 20% of factor data indications. Then I back testing the strategy's performance. This could demonstrate whether a higher level of factor indication leads to a better performance or a lower one does.(Or maybe this factor has shifty influence on the performance and thus making it a bad factor.)
+      
+      
+      
+
+\clearpage
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",results='hide'}
+#Preparation#
+#=============================================================================#
+{
+setwd("C:\\Users\\shixi19\\Desktop\\RFactorModel")
+library(WindR)
+w.start(showmenu=F)
+#options(warn=-1)
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#=============================================================================#
+#Public functions#
+{
+savedata<-function(x){
+      write.csv(get(x),file=paste0("C:\\Users\\shixi19\\Desktop\\FactorData\\",x,".csv"))
+}##give the name of the variable as a character 
+readdata<-function(x){
+      data<-read.csv(file=paste0("C:\\Users\\shixi19\\Desktop\\FactorData\\",x,".csv"))
+      data<-data[,-1]
+      names(data)<-substr(names(data),2,10)
+      return(data)
+}##give the name of the variable as a character 
+startdatefun<-function(y){
+year<-substr(Sys.Date(),1,4)
+year<-as.numeric(year)
+year<-year-y
+year<-as.character(year)
+startdate<-paste0(year,"0101")
+startdate}
+startdatefunwithhash<-function(y){
+year<-substr(Sys.Date(),1,4)
+year<-as.numeric(year)
+year<-year-y
+year<-as.character(year)
+startdate<-paste0(year,"-01-01")
+return(startdate)}
+startdatefunwithnohash<-function(y){
+      year<-substr(Sys.Date(),1,4)
+      year<-as.numeric(year)
+      year<-year-y
+      year<-as.character(year)
+      startdate<-paste0(year,"0101")
+      return(startdate)}
+datepoint<-function(y){
+      close<-w.wsd("000001.SH","pct_chg",startdatefun(y),
+                   Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+      plotdate<-as.character(close[,1])
+      plotdate
+}
+#Read in all A stocks at the time of startdate and follow the industry 
+#classification of citic 
+stocklistfun<-function(y){
+      startdate<-startdatefun(y)
+#       stocklist<-w.wset('SectorConstituent',
+#                         paste0('date=',startdate,';sectorId=a001010100000000'))
+#      stocklist<-w.wset('SectorConstituent',
+#                        paste0('date=',startdate,';windcode=000300.SH'))
+       stocklist<-w.wset('SectorConstituent',
+                         paste0('date=',startdate,';windcode=000906.SH'))
+      stock<-stocklist$Data$wind_code#Get the code for all A stock
+      stockname<-stocklist$Data$sec_name#Get the name for all A stock
+      industrycode<-w.wss(stock,'industry_citiccode,industry_citic',
+        paste0('tradeDate=',startdate),'industryType=1')$Data$INDUSTRY_CITICCODE
+      industryname<-w.wss(stock,'industry_citiccode,industry_citic',
+        paste0('tradeDate=',startdate),'industryType=1')$Data$INDUSTRY_CITIC
+      stock_industry<-rbind(stock,industrycode,industryname)
+      stock_industry<-stock_industry[,stock_industry[3,]!="NaN"]
+      stock_industry
+}#Change the initial stock pool here!#
+removeNA<-function(data){
+      data[is.na(data)]=0
+      data
+}
+standard<-function(data){
+      getmid<-apply(data[,-1],1,median,na.rm=TRUE)
+      getmid<-removeNA(getmid)#Since we have set apply function as na.rm=TRUE,Here we can let         
+      #na equals zero because they must come from those row with straight NA
+      middistance<-abs(data[,-1]-getmid)
+      mid<-apply(middistance,1,median,na.rm=TRUE)
+      mid<-removeNA(mid)
+      data1<-data[,-1]
+      data1<-removeNA(data1)
+      for(i in 1:length(getmid)){
+            
+            data1[i,data1[i,]-getmid[i]>3*abs(mid[i])]<-getmid[i]+3*abs(mid[i])
+            data1[i,data1[i,]-getmid[i]<(-3*abs(mid[i]))]<-getmid[i]+(-3*abs(mid[i]))
+            
+      }
+      data[,-1]<-data1
+       getmean<-apply(data[,-1],1,mean,na.rm=TRUE)
+      getmean<-removeNA(getmean)
+      data[,-1]<-data[,-1]-getmean
+      getvar<-apply(data[,-1],1,var,na.rm=TRUE)
+      getvar[is.na(getvar)]<-1
+      getvar[getvar==0]<-1
+      data[,-1]<-data[,-1]/sqrt(getvar)
+      data
+}
+RemoveNA<-function(x){
+      x<-x[,-1]
+      x[is.na(x)]<-0
+      x
+}
+sizeweight<-function(stocklist){
+      weight<-w.wss(stocklist,'total_shares',paste0('tradeDate=',Sys.Date()))$Data$TOTAL_SHARES
+      tot<-sum(weight)
+      weight<-weight/tot
+      weight
+}
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Determine the public variables#
+#=============================================================================#
+y<-2
+#This indicates how many years to look back which has to be less than 10
+#Strongly suggest to set y<-2 since the data of expected level are available
+#since 2013
+#-----------------------------------------------------------------------------#
+stock_industry<-stocklistfun(y)
+stocklist<-stock_industry[1,]#Use it too often so that I list it seperately
+num.industry<-as.numeric(length(unique(stock_industry[3,])))
+num.stock<-as.numeric(length(stock_industry[1,]))
+#checkdate<-datepoint(y)
+savedata("stocklist")
+sizeweight_l<-sizeweight(stocklist)
+#=============================================================================#
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+savedata("sizeweight_l")
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#=============================================================================#
+#Functions to use#
+{
+# stockperform250day<-function(stocklist,checkdate){
+#       data<-w.wsd(stocklist,"pct_chg","ED-250D",
+#             checkdate,"Fill=Previous;PriceAdj=F")$Data
+#       data<-removeNA(data)
+#       data
+# }
+# indexperform250day<-function(indexname,checkdate){
+#       data<-w.wsd(as.character(indexname),"pct_chg","ED-250D",checkdate
+#             ,"Fill=Previous;PriceAdj=F")$Data
+#       data<-removeNA(data)
+#       data
+#}#indexname:"000300.SH"or"000906.SH"
+weight<-function(num,groupnum){
+      weight<-rep(1:groupnum,each=ceiling(num/groupnum))
+      weight<-weight[1:num]
+      sum<-sum(weight)
+      weight<-weight/sum
+      weight
+}
+# stockperformance<-stockperform250day(stocklist,checkdate)
+# indexperformance<-indexperformance250day("000300.SH",checkdate)
+
+#Gain#
+gainf<-function(y,stocklist){
+      data<-w.wsd(stocklist,"pct_chg",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+      data[,-1]<-data[,-1]/100
+      data<-removeNA(data)
+      data
+}
+#Beta#
+betafun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"beta_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("beta missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Momentum#
+momentumfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"annualyeild_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("momentum missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]/100
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Size#
+sizefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"total_shares",startdatefunwithhash(y),Sys.Date(),
+            "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("size missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data[,-1]<-log10(data[,-1])
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Earnings Yield#
+eroefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_avgroe_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eroe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+eepsfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_eps_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eeps missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+pefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"rating_avg",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#        print(paste0("pe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Volatility#
+vol1fun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"annualstdevr_100w",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("vol1 missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+vol2fun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"annualstdevr_24m",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("vol2 missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+turnfun<-function(y,stocklist){
+      stock<-stocklist
+      year<-substr(Sys.Date(),1,4)
+      year<-as.numeric(year)
+      year<-year-y
+      year<-as.character(year)
+      startdate<-paste0(year,"-01-01")
+      #end sub
+      #sub to move to the end of the year
+      year1<-substr(startdate,1,4)
+      enddate<-paste0(year1,"-12-31")
+      #end sub
+      TURN<-w.wsd(stock,"turn",startdate,enddate,
+                  paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+      for (i in 1:(y-1)){
+            #sub to add one year!
+            year1<-substr(startdate,1,4)
+            year1<-as.numeric(year1)
+            year1<-year1+1
+            year1<-as.character(year1)
+            startdate<-paste0(year1,"-01-01")
+            #sub end
+            #sub to move to the end of the year
+            year1<-substr(startdate,1,4)
+            enddate<-paste0(year1,"-12-31")
+            #end sub
+            Temp<-w.wsd(stock,"turn",startdate,enddate,
+                        paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+            TURN<-rbind(TURN,Temp)
+      }
+      #Get startdate and end date
+      year<-substr(Sys.Date(),1,4)
+      startdate<-paste0(year,"-01-01")
+      enddate<-Sys.Date()
+      #end sub
+      Temp<-w.wsd(stock,"turn",startdate,enddate,
+                  paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+      TURN<-rbind(TURN,Temp)
+
+      #Get startdate and end date
+      year<-substr(Sys.Date(),1,4)
+      year<-as.numeric(year)
+      year<-year-y
+      year<-as.character(year)
+      startdate<-paste0(year,"-01-01")
+      #end sub
+
+      #sub to move to the end of the year
+      year1<-substr(startdate,1,4)
+      enddate<-paste0(year1,"-12-31")
+      #end sub
+      TURN<-w.wsd(stock,"turn",startdate,enddate,
+                  paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+      for (i in 1:(y-1)){
+            #sub to add one year!
+            year1<-substr(startdate,1,4)
+            year1<-as.numeric(year1)
+            year1<-year1+1
+            year1<-as.character(year1)
+            startdate<-paste0(year1,"-01-01")
+            #sub end
+            #sub to move to the end of the year
+            year1<-substr(startdate,1,4)
+            enddate<-paste0(year1,"-12-31")
+            #end sub
+            #sub to add one year
+            year<-as.numeric(year)
+            year<-year+1
+            year<-as.character(year)
+            #end sub
+            Temp<-w.wsd(stock,"turn",startdate,enddate,
+                        paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+            TURN<-rbind(TURN,Temp)
+      }
+      #Get startdate and end date
+      year<-substr(Sys.Date(),1,4)
+      startdate<-paste0(year,"-01-01")
+      enddate<-Sys.Date()
+      #end sub
+      Temp<-w.wsd(stock,"turn",startdate,enddate,
+                  paste("year=",year,";Period=M;Fill=Previous;PriceAdj=F"))$Data
+      TURN<-rbind(TURN,Temp)
+      data<-TURN
+#       print(paste0("Turn missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Growth#
+eprofitfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_netprofit_CAGR",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eprofit missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+esalesfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_sales_CAGR",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("esales missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+growthroefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"growth_roe",startdatefunwithhash(y),
+                  Sys.Date(),"N=3;Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("growthroe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+growthgrfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"growth_gr",startdatefunwithhash(y),
+                  Sys.Date(),"N=3;Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("growthgr missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Value#
+valuefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"pb",startdatefunwithhash(y)
+                  ,Sys.Date(),"ruleType=9;Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("value missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]^(-1)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Leverage#
+longdebtfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"longdebttoworkingcapital",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("longdebt missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]^(-1)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+netdebtfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"netdebttoev",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("netdebt missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]^(-1)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+lldebtfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"longdebttolongcaptial",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("lldebt missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]^(-1)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+assetdebtfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"debttoassets",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("assetdebt missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]^(-1)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#News&Others#
+focusfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"xq_WOW_focus",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("news missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+commentsfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"xq_WOW_comments",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("comments missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+sharesfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"xq_WOW_shares",startdatefunwithhash(y),
+                  Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("shares missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+holderpctfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"holder_avgpct",startdatefunwithhash(y),
+                  Sys.Date(),"shareType=1;Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("holderpct missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Read in Data#
+#Performance#
+{
+gain<-gainf(y,stocklist)
+}
+savedata("gain")
+#Beta#
+{
+      beta<-betafun(y,stocklist)
+}
+savedata("beta")
+#Momentum#
+{
+momentum<-momentumfun(y,stocklist)
+}
+savedata("momentum")
+#Size#
+{
+size<-sizefun(y,stocklist)
+}
+savedata("size")
+#Earnings Yield#
+{
+#Read in sub factors#
+{
+eroe<-eroefun(y,stocklist)
+eeps<-eepsfun(y,stocklist)
+pe<-pefun(y,stocklist)
+}
+}
+savedata("eroe")
+savedata("eeps")
+savedata("pe")
+{#Optimization#
+{
+calgain<-function(variables,eroe,eeps,pe){
+  gain=eroe
+  gain[,-1]=variables[1]*(eroe[,-1])+variables[2]*(eeps[,-1])+variables[3]*(pe[,-1])
+  gain<-removeNA(gain)
+  gain
+}
+
+difference<-function(variables,eroe,eeps,pe,real){
+      diff<-sum(((real[,-1])-calgain(variables,eroe,eeps,pe)[,-1])^2)
+      diff<-removeNA(diff)
+      diff
+}
+variables<-c(1,1,1)
+optimresult<-optim(variables,difference,eroe=eroe[-nrow(eroe),],
+                   eeps=eeps[-nrow(eeps),],pe=pe[-nrow(pe),],real=gain[-1,])
+subweight<-optimresult$par
+}
+#Generate Earnings Yield#
+earningsyield<-calgain(subweight,eroe,eeps,pe)
+earningsyield<-standard(earningsyield)
+}
+savedata("earningsyield")
+#Volatility#
+{
+#Read in sub factors#
+{
+vol1<-vol1fun(y,stocklist)
+vol2<-vol2fun(y,stocklist)
+turn<-turnfun(y,stocklist)
+}
+}
+savedata("vol1")
+savedata("vol2")
+savedata("turn")
+{
+      #Optimization#
+{
+      variables<-c(1,1,1)
+      optimresult<-optim(variables,difference,eroe=vol1[-nrow(vol1),],
+                         eeps=vol2[-nrow(vol2),],pe=turn[-nrow(turn),],real=gain[-1,])
+      subweight<-optimresult$par
+}
+#Generate volatility#
+volatility<-calgain(subweight,vol1,vol2,turn)
+volatility<-standard(volatility)
+}
+savedata("volatility")
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",eval=FALSE}
+#Growth#
+{
+#Read in sub factors#
+{
+      ep<-eprofitfun(y,stocklist)
+      es<-esalesfun(y,stocklist)
+      ge<-growthroefun(y,stocklist)
+      gt1<-growthgrfun(y,stocklist)
+}
+}
+savedata("ep")
+savedata("es")
+savedata("ge")
+savedata("gt1")
+{
+      #Optimization#
+{
+      calgain<-function(variables,ep,es,ge,gt1){
+            gain=ep
+            gain[,-1]=variables[1]*(ep[,-1])+variables[2]*(es[,-1])+variables[3]*(ge[,-1])+variables[4]*(gt1[,-1])
+            gain<-removeNA(gain)
+            gain
+      }
+      
+      difference<-function(variables,ep,es,ge,gt1,real){
+            diff<-sum(((real[,-1])-calgain(variables,ep,es,ge,gt1)[,-1])^2,na.rm=TRUE)
+            diff
+      }
+      variables<-c(1,1,1,1)
+      optimresult<-optim(variables,difference,ep=ep[-nrow(ep),],gr=NULL,
+                         es=es[-nrow(es),],gt1=gt1[-nrow(gt1),],ge=ge[-nrow(ge),],real=gain[-1,])
+      subweight<-optimresult$par
+}
+#Generate growth#
+growth<-calgain(subweight,ep,es,ge,gt1)
+growth<-standard(growth)
+}
+savedata("growth")
+#Value#
+{
+      value<-valuefun(y,stocklist)
+}
+savedata("value")
+#Leverage#
+{
+      #Read in sub factors#
+{
+      longdebt<-longdebtfun(y,stocklist)
+      netdebt<-netdebtfun(y,stocklist)
+      lldebt<-lldebtfun(y,stocklist)
+      assetdebt<-assetdebtfun(y,stocklist)
+}
+}
+savedata("longdebt")
+savedata("netdebt")
+savedata("lldebt")
+savedata("assetdebt")
+{
+      #Optimization#
+{
+      variables<-c(0,0,0,0)
+      optimresult<-optim(variables,difference,ep=longdebt[-nrow(longdebt),],
+                         es=netdebt[-nrow(netdebt),],ge=lldebt[-nrow(lldebt),],gt1=assetdebt[-nrow(assetdebt),],real=gain[-1,])
+      subweight<-optimresult$par
+}
+#Generate leverage#
+leverage<-calgain(subweight,longdebt,netdebt,lldebt,assetdebt)
+leverage<-standard(leverage)
+leverage<-removeNA(leverage)
+leverage[1:8,-1]<-leverage[9,-1]
+}
+savedata("leverage")
+#News&Others#
+{
+      #Read in sub factors#
+{
+      focus<-focusfun(y,stocklist)
+      comments<-commentsfun(y,stocklist)
+      shares<-sharesfun(y,stocklist)
+      holderpct<-holderpctfun(y,stocklist)
+}
+}
+savedata("focus")
+savedata("comments")
+savedata("shares")
+savedata("holderpct")
+{
+      #Optimization#
+{
+      variables<-c(1,1,1,1)
+      optimresult<-optim(variables,difference,ep=focus[-nrow(focus),],
+                         es=comments[-nrow(comments),],ge=shares[-nrow(shares),],gt1=holderpct[-nrow(holderpct),],real=gain[-1,])
+      subweight<-optimresult$par
+}
+#Generate news#
+news<-calgain(subweight,focus,comments,shares,holderpct)
+news<-standard(news)
+news<-removeNA(news)
+}
+savedata("news")
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#!Change the base index here!##There is another at the latter part!#
+{
+      zcf1_CLOSE_p<-w.wsd("000906.SH","pct_chg",startdatefunwithhash(y),
+                          Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data$PCT_CHG
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+plotfactor_t<-function(factor,groupnum){
+num_stock<-ncol(factor)-1
+num_periods<-nrow(factor)
+#Get startdate and end date
+year<-substr(Sys.Date(),1,4)
+year<-as.numeric(year)
+year<-year-y
+year<-as.character(year)
+startdate<-paste0(year,"-01-01")
+#end sub
+close<-gain
+plotdate<-as.character(close[,1])
+plotdate<-c(startdate,plotdate)
+plotdate<-plotdate[1:(length(plotdate)-1)]
+
+# zcf1_CLOSE_p<-w.wsd("000300.SH","pct_chg",factor[1,1],
+#                     Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data$PCT_CHG
+# #end sub#
+      plotdata<-RemoveNA(factor)
+      gain<-matrix(1,num_periods,groupnum)
+      gain_index<-matrix(1,num_periods,1)
+      adjustgain<-matrix(1,1,groupnum)
+      for(i in 1:(num_periods-1)){
+            gain_index[i+1]<-gain_index[i]*(1+zcf1_CLOSE_p[i+1]/100)
+            #group<-cutree(hclust(dist(as.numeric(plotdata[i,]))),groupnum)
+            group<-rep(1:groupnum,each=ceiling(length(close[i+1,-1])/groupnum))
+            groupdata<-rbind(close[i+1,-1],plotdata[i,])
+            groupdata<-groupdata[,order(groupdata[2,])]
+            groupdata<-rbind(groupdata,group[1:length(close[i+1,-1])])
+            m<-tapply(as.numeric(groupdata[1,]),
+                      as.factor(as.numeric(groupdata[3,])),mean,na.rm=TRUE)
+            for(j in 1:groupnum){
+                  if(is.na(m[j])){
+                        m[j]<-1
+                        gain[i+1,j]<-gain[i,j]*m[j]
+                  }else{
+                        m[j]<-1+m[j]
+                        gain[i+1,j]<-gain[i,j]*m[j]
+                  }
+            }
+      }
+      for(j in 1:groupnum){
+            adjustgain[j]<-sqrt(var(gain[,j]))
+      }
+      output<-rbind(gain=gain[num_periods,],risk=adjustgain)
+      par(mfrow=c(groupnum,1),mar=c(2,2,1,1))
+      for(i in 1:groupnum){
+            plot(as.Date(plotdate),gain[,i],type="p",ylim=c(0,max(max(gain_index),max(gain))))
+            lines(as.Date(plotdate),gain[,i])
+            lines(as.Date(plotdate),gain_index,col="red")
+            legend("topleft",legend=as.character(i))
+      }
+      #       dev.off()
+      output
+}
+
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression<-function(factor,t_threshold){
+      #================#
+      plotdate<-as.character(factor[,1])
+      count<-0
+      sum_t<-0
+      sum_r<-0
+      regressdata<-RemoveNA(factor)
+      num.col<-as.numeric(ncol(regressdata))
+      num.row<-as.numeric(nrow(regressdata))
+      close1<-RemoveNA(gain)
+      timeline<-rep(0,(num.row-2))
+      efficientrow<-num.row-2
+      factorgain<-matrix(0,num.row,1)
+      for(i in 1:(num.row-2)){
+            if(sum(is.na(regressdata[i,]))>(0.5*length(regressdata[i,]))|sum(abs(regressdata[i,]))==0){
+                  efficientrow<-efficientrow-1##To determine if this data is meaningful
+                  timeline[i]<-1
+            }
+            else{
+                  regressdata[is.na(regressdata)]<-0
+                  lm_temp<-lm((as.numeric(close1[i,]))~as.numeric(regressdata[i,]),model=TRUE)
+                  if(nrow(summary(lm_temp)$coefficients)>=1){
+                        tvalue<-summary(lm_temp)$coefficients[2,3]
+                        factorgain[i]<-summary(lm_temp)$coefficients[2,1]
+                        if(abs(tvalue)>t_threshold){
+                              count<-count+1
+                              timeline[i]<-2
+                        }
+                        sum_t<-sum_t+abs(tvalue)
+                        sum_r<-abs(summary(lm_temp)$r.squared)+sum_r
+                  }else{
+                        efficientrow<-efficientrow-1
+                        timeline[i]<-1
+                  }}}
+      average<-sum_t/(efficientrow)
+      count<-count/(efficientrow)
+      sum_r<-sum_r/(efficientrow)
+      gain_factor<-matrix(1,num.row-1,1)
+      gain<-matrix(1,num.row-2,1)
+      sum_f<-0
+      for(i in 1:(num.row-2)){
+            sum_f<-sum_f+factorgain[i]
+            gain_factor[i+1]<-gain_factor[i]*(1+factorgain[i])
+            gain[i]<-factorgain[i]
+
+      }
+      avg_f<-(sum_f/(efficientrow))
+      avg_f<-((1+avg_f)^12-1)*100
+      vol_f<-sqrt(var(gain[gain!=0]*100))*sqrt(12)
+      out<-data.frame(average_t_value=average,
+                      times_larger_than_threshold=count,rsquare=sum_r,
+                      average_factor_gain_year=avg_f,
+                      volatility_factor_gain=vol_f )
+      #plot
+      par(mfrow=c(1,1),mar=c(3,2,1,1))
+      gain_index<-matrix(1,num.row-1,1)
+      for(i in 1:(num.row-2)){
+            gain_index[i+1]<-gain_index[i]*(1+zcf1_CLOSE_p[i+1]/100)
+      }
+      timeline<-c(1,timeline)
+      plot(as.Date(plotdate[-1]),timeline,type="p",ylim=c(0,max(max(gain_index),max(gain_factor))))
+      lines(as.Date(plotdate[-1]),gain_index,col="red")
+      lines(as.Date(plotdate[-1]),gain_factor,col="blue")
+      legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+      points(as.Date(plotdate[-1]),timeline,type="p")
+      print(out)
+}
+```
+\clearpage
+
+## Trait Factors: Beta
+
+### What is beta  
+
+Beta is the correlation between a certain stock and the reference index. Here we choose the *CSI 800 Index* as the reference and the time span is set to be the past 100 weeks. The beta indication is calculated basing on the time series of stock performance of daily frequency.  
+
+###  sectioned portofolio backtest result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("beta")
+plotfactor_t(beta,5)
+```
+****************
+#### What does the plot mean  
+
+These plots shows the performance of five portofolios. The No.1 portofolio always includes those stocks with the lowest factor indications at last month and the No.5 has the highest. The red line is the reference index performance.  
+The table below the plots shows the performance of each group. The first row shows the final value of each portofolio whose initial value is set to be one and the second row shows the standard deviation of each portofolio.
+
+****************
+
+From  sectioned portofolio backtest result we can easily find out that those with high beta usually perform better than those with lower ones. Also, I should point out that **unlike the reference index (CSI 800) which sets the weights of each component stocks according to their market capitalizations, here I set the weights to be equal among all components within one portofolio**. 
+
+### The cross-section regression result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=5,fig.align='center'}
+regression(beta,2)
+```
+****************
+
+####What does the plot mean  
+
+This plot shows the regression result. The red line is the performance of our reference index and the blue line shows the performance of factor return, that is the coefficient of the factor generated by the regression model.Those points indicates whether the factor's t-value is larger than the threshold or not. If it locates at the top of the plot than t-value exceeds threshold during that period and vice versa.  
+The table below the plot shows detailed information including the average t-value, the proportion of t-value exceeding threshold, the total explanatory power of the regression model, the average annual yield of factor and the volatility of factor return.
+
+*****************
+
+It's obvious to see that beta has a large t-value and a high proportion of times when its t-value exceeds threshold. Therefore, beta should be a rather effective factor. 
+
+
+**Conclusion**  
+
+Beta seems to be a decent factor but being different from an alpha factor, beta actually enlarge the gain and the loss, therefore, it makes no sense to allow risk exposure on beta.
+
+Beta            |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |beta_100w                              |t-value:      |5.2
+Effective:      |YES                                    |Effective%    |71%
+Way Of Effect:  |The smaller the better                 |FactorGain    |19.3%
+MissingData%:   |193/26334                              |
+
+\clearpage
+
+## Trait Factors: Momentum
+
+### What is momentum  
+
+Momentum measures the historical perormance of this stock, it's the average annual yield for the last 100 weeks. This factor may suggest whether those good stocks tend to maintain good(commonly known as momentum effect) or tend to become weak.(commonly known as turnover effect)  
+
+###  sectioned portofolio backtest result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("momentum")
+plotfactor_t(momentum,5)
+```
+
+Stocks with low momentum tend to perform better, however, the group with the lowest indication is not the best. Those ranked in the bottom twenty to forty percent perform the best. This indicates that the reversal effect in A-share market tends to be more decisive than the momentum effect.
+
+### The cross-section regression result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(momentum,2)
+```
+
+Regreesion result suggests that momentum is a highly effective factor with an average t-value as high as 6.6 and remains effective in up to 88% of time. This is a good factor and contribute positively to the stock performance.
+
+**Conclusion**  
+
+
+Momentum        |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |annualyield_100w                       |t-value:      |6.5
+Effective:      |YES                                    |Effective%    |87%
+Way Of Effect:  |The bottom 20% to 40% is the best      |FactorGain    |32%
+MissingData%:   |193/26334                              |
+
+\clearpage
+
+## Trait Factors: Size
+
+### What is size  
+
+Size factor is a rather fundamental character of a stock. It indicates the total shares of this company and thus showing the scale of this stock which is a decisive but complicated factor in Chinese A-share market.   
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("size")
+plotfactor_t(size,5)
+```
+  
+A-share market has some really big companies. For example, those commercial banks occupy almost half of the total weight in the stock index.
+
+We can see that stocks with smaller size are prefered by market. However this conclusion may vary from time to time which and thus making this factor unreliable.  
+
+
+### The cross-section regression result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(size,2)
+```
+
+As we can see from the regression result that the size factor does influence stock performance. But may not in a clear pattern and this factor may not generate ideal payoff. This result suggests to leave no risk exposure to size factor.
+
+**Conclusion**  
+
+This factor has ambiguous effect on the stock payoff which makes it too dangerous to play with. Therefore, I think it's better to limit the risk exposure on this factor to be 0.
+
+Size            |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |total_shares                           |t-value:      |4.3
+Effective:      |YES                                    |Effective%    |71%
+Way Of Effect:  |Unclear                                |FactorGain    |-2%
+MissingData%:   |0/26334                                |
+
+\clearpage
+
+## Trait Factors: Consensus Expectation
+
+### What is Consensus Expectation
+
+Consensus Expectation is the unified opinion towards a stock from thousands of stock analysts. This factor is consisted of three sub-factors: the expected roe(Rate of Return on Common Stockholders’ Equity),the expected eps(Earnings Per Share) and the average rating from analysts.  
+The factor is a linear combination of sub factors and the weight of each subfactor is determined by an optimization model whose target is to maximize the explanatory power of the new generated factor.  
+
+###  sectioned portofolio backtest result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("Consensus Expectation")
+plotfactor_t(earningsyield,5)
+```
+
+Backtest suggests that those stocks prefered by stock analysts tend to be prefered by the market as a whole. However, the most welcomed by analysts are not those perform the best in market.
+
+### The cross-section regression result
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(earningsyield,2)
+```
+
+Regression suggests that consensus expectation, as a factor is normally stable and profitable. However, it might go very wrong sometime. For example, the start of 2015 witnesses a Waterloo of stock analysts. 
+
+**Conclusion**  
+
+My suggestion is to use this factor with care. On one hand, it's stable and profitable at most time. On the other, it may lead to big disaster. Consequently, we shall use this factor. With great care, though.
+
+
+Expectation     |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |west-avgroe-FY1,west-eps-FY1,rating-avg|              |                          
+Effective:      |YES                                    |Effective%:   |55%
+Way Of Effect:  |The higher is better                   |FactorGain:   |6.6%
+MissingData%:   |3380/26334                             |t-value:      |2.72
+
+\clearpage
+
+## Trait Factors: Volatility
+
+### What is Volatility
+
+Volatility shows how severe does this stock swing in the past. In a broader way, I ddefine volatility as the risk factor. It indicates how dangerous and active this stock is.  
+It is consisted of three sub-factors including the annual standard deviation of the monthly yield sequence for the last one hundred weeks and the last three years. Also, I include the turnover rate factor to indicate how actively is this stock being traded.  
+The factor is a linear combination of sub factors and the weight of each subfactor is determined by an optimization model whose target is to maximize the explanatory power of the new generated factor.  
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("volatility")
+plotfactor_t(volatility,5)
+```
+
+The plot suggests that the higher the volatility, the better the performance and top 20% to 40% give the best return. So this result suggests that more active stocks may have larger risk yet better payoff. 
+
+### The cross-section regression result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(volatility,2)
+```
+
+Regression model helps us to decide whether risk is a good thing. It's quite clear that taking too much risks may end up broken. Therefore we should strictly limit the risk exposure on volatility to zero while generating our factor strategy.
+
+**Conclusion**  
+
+Applying volatility as an alpha factor is too risky. I suggest to limit its exposure to zero.  
+
+
+
+Volatility      |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |annualstdevr-100w,annualstdevr-36m,turn|              |                          
+Effective:      |YES                                    |Effective%:   |77%
+Way Of Effect:  |Not a good factor                      |FactorGain:   |-20%
+MissingData%:   |197/26334                              |t-value:      |5.43
+
+\clearpage
+
+
+## Trait Factors: Growth
+
+### What is Growth  
+
+Growth factor contains two aspects, the historical growth of this company and the estimated growth of it.  Therefore, this growth factor is consisted of four sub factors: the estimated net profit growth, the estimated sales growth,the roe growth for last time period and the gross revenue growth rate.
+The factor is a linear combination of sub factors and the weight of each subfactor is determined by an optimization model whose target is to maximize the explanatory power of the new generated factor.
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("growth")
+plotfactor_t(growth,5)
+```
+
+We can see from the plot that companies with high incidents in growth factor tend to perform better. However, it's not clear whether it's the higher the better or not. What definitely can be told is that a decent growth promises a better performance.  
+
+### The cross-section regression result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(growth,2)
+```
+
+The regression model result leads to a big surprise. The growth factor actually has a very small positive outcome. But this may be the consequence of regression data choice. We now use regression model to explain the performance with the data at the same time period. **However, growth data tends to influence the stock performance at the next period or even later. Besides, the time point we choose is not exactly the timepoint when the raw data is released. After all, these factors are mainly financial indicators and tend to be released in quarterly and yearly reports.**
+Consequently, I do not want to rush to a conclusion toward whether the growth factor is a good one or not, it will be discussed with more detail in the following reports.
+
+**Conclusion**  
+
+This factor's effect remains unclear. My suggestion is to leave no risk exposure on it.  
+
+
+Growth          |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |west-net-profit-CAGR,west-sales-CAGR,growth-roe,growth-gr                          
+Effective:      |NO                                     |Effective%:   |23%
+Way Of Effect:  |Unclear                                |FactorGain:   |2%
+MissingData%:   |3166/26334                             |
+
+\clearpage
+
+## Trait Factors: Value
+
+### What is Value
+
+Value indicates the valuation level of the stock. Despite the fact that lots of indicators can be applied to demonstrate the valuation level, I find them all too much similar that causes collinearity. Actually, the single PB-TTM factor is well qualified to serve as the value indicator. Here we actually use the reciprocal of PB.
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("value")
+plotfactor_t(value,5)
+```
+
+These plots indicates that those stocks with low evaluation level tend to become profitable while those overestimated shares will devalue. However, it's best to rank in the bottom 20 to 40 percent rather than the lowest 20% in order to perform best.
+
+### The cross-section regression result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(value,2)
+```
+
+The regression result supports the result of portofolio simulation. This indicator offers a steady nagetive yield which suggests that the inverse of it (the PB) offers a positive one.
+
+**Conclusion**  
+
+The value factor is effective and should be applied as an profitable alpha factor. However, we should notice that value factor is defined as the reciprocal of PB. Therefore its value being smaller suggests a better stock performance.
+
+
+Value           |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |$\frac{1}{PB}$                         |t-value:      |5.5                          
+Effective:      |YES                                    |Effective%:   |90%
+Way Of Effect:  |The higher PB the better               |FactorGain:   |-15%
+MissingData%:   |0/26334                                |
+
+\clearpage
+
+## Trait Factors: Leverage
+
+### What is Leverage  
+
+Leverage is the factor showing the debt burden of the company. It is consisted of four sub factors: debt ratio, long time debt ratio, debt paying ability, long time debt paying ability. Here we actually use the reciprocal of these factors.
+The factor is a linear combination of sub factors and the weight of each subfactor is determined by an optimization model whose target is to maximize the explanatory power of the new generated factor.
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("leverage")
+plotfactor_t(leverage,5)
+```
+
+
+It's hard to tell any conclusion for sure from this plot.  
+
+### The cross-section regression result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("leverage")
+regression(leverage,2)
+```
+
+The regression result doesn't clearify much ambiguity of this factor. In cosideration of the remarkable difficult of obtaining the raw data for this factor, it doesn't qualified to be a decent factor.  
+
+**Conclusion**  
+
+Leverage factor has uncertain effect on stock performance. Besides, its data is hard to obtain. Therefore I suggest leaving no risk exposure to this factor.
+
+
+Leverage        |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |longdebttoworkingcapital,netdebttoev,longdebttolongcapital,debttoassets                           
+Effective:      |Unclear                                |Effective%:   |61%
+Way Of Effect:  |No significant influence               |FactorGain:   |1%
+MissingData%:   |7590/26334                             |t-value:      |3.1
+
+\clearpage
+
+## Trait Factors: News
+
+### What is News  
+
+News is the factor measuring the market heat level of a particular stock. It includes data from [XueQiu](http://xueqiu.com/), a widely accepted and frequently used online forum to discuss stocks in Chinese stock market. The News factor is consisted of four sub factors including the newly increased population who focuses, discusses and shares trade history about this stock during last obervation period. Also, the average inventory per account is taken into consideration since it has been proved by much experience as a useful factor.  
+The factor is a linear combination of sub factors and the weight of each subfactor is determined by an optimization model whose target is to maximize the explanatory power of the new generated factor.
+
+###  sectioned portofolio backtest result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+print("news")
+plotfactor_t(news,5)
+```
+
+The portofolio backtest result indicates that high marks in News factor obviously lead to better payoff. What's even better is that the higher the factor indication, the more the payoff.   
+
+### The cross-section regression result  
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+regression(news,2)
+```
+
+**Conclusion**  
+
+This factor is a rather new one, the data offered is somehow messy and its real effect remains much unclear. Since the backtest and the regression model offer opposite conclusions, I put my final conclusion as unclear for this factor.  
+However, its limited history does promise some potential of it becoming a profitable alpha factor. Therefore I suggest to carefully monitor this factor while currently leave no risk exposure to it.
+
+
+News            |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |xq-WOW-focus,xq-WOW-comments,xq-WOW-shares,holder-avgpct                          
+Effective:      |Unclear                                |Effective%:   |77%
+Way Of Effect:  |Unclear                                |FactorGain:   |-9%
+MissingData%:   |14400/26334                            |T-value:      |4.7
+
+\clearpage
+
+## Industry factors
+### What is industry factors
+Industry factors are set on the reference of the CITIC primary industry classification, which includes 29 industries. I treat it as a factor variable. That is, if this stock belongs to the first industry class than it will get "yes" for the first industry variable and "no" for the rest 28 of them.
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Group One: The industry factors#
+
+#Create industry factors#
+#Can only run one time!!#
+{
+x<-rep(0,num.stock)
+factor_bank<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_realestate<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_medic<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_restaurant<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_retail<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_machine<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_buildmaterial<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_homeappliance<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_cloth<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_food<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_electronic<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_transport<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_auto<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_lightindustry<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_electric<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_integrate<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_communicate<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_oil<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_coloredmetal<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_agriculture<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_architecture<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_computer<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_chemical<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_coal<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_electricequipment<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_military<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_nonbank<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_steel<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factor_media<-factor(x,levels=c(0,1),labels=c("no","yes"))
+factorname<-c("factor_bank","factor_realestate","factor_medic",
+              "factor_restaurant","factor_retail","factor_machine",
+              "factor_buildmaterial","factor_homeappliance","factor_cloth",
+              "factor_food","factor_electronic","factor_transport","factor_auto",
+              "factor_lightindustry","factor_electric","factor_integrate",
+              "factor_communicate","factor_oil","factor_coloredmetal",
+              "factor_agriculture","factor_architecture","factor_computer",
+              "factor_chemical","factor_coal","factor_electricequipment",
+              "factor_military","factor_nonbank","factor_steel","factor_media")
+factornamech<-unique(stock_industry[3,])
+factorcode<-unique(stock_industry[2,])
+factorlist_industry<-rbind(factorname,factorcode,factornamech)
+}
+#Create industry factors end#
+
+#Initialize industry factors#
+{
+for(i in 1:num.stock)
+{
+          switch(stock_industry[3,i],
+            "银行"={stock_industry[3,i]="bank";factor_bank[i]="yes"},
+            "房地产"={stock_industry[3,i]="realestate";factor_realestate[i]="yes"},
+            "医药"={stock_industry[3,i]="medic";factor_medic[i]="yes"},
+            "餐饮旅游"={stock_industry[3,i]="restaurant";factor_restaurant[i]="yes"},
+            "商贸零售"={stock_industry[3,i]="retail";factor_retail[i]="yes"},
+            "机械"={stock_industry[3,i]="machine";factor_machine[i]="yes"},
+            "建材"={stock_industry[3,i]="buildmaterial";factor_buildmaterial[i]="yes"},
+            "家电"={stock_industry[3,i]="homeappliance";factor_homeappliance[i]="yes"},
+            "纺织服装"={stock_industry[3,i]="cloth";factor_cloth[i]="yes"},
+            "食品饮料"={stock_industry[3,i]="food";factor_food[i]="yes"},
+            "电子元器件"={stock_industry[3,i]="electronic";factor_electronic[i]="yes"},
+            "交通运输"={stock_industry[3,i]="transport";factor_transport[i]="yes"},
+            "汽车"={stock_industry[3,i]="auto";factor_auto[i]="yes"},
+            "轻工制造"={stock_industry[3,i]="lightindustry";factor_lightindustry[i]="yes"},
+            "电力及公用事业"={stock_industry[3,i]="electric";factor_electric[i]="yes"},
+            "综合"={stock_industry[3,i]="integrate";factor_integrate[i]="yes"},
+            "通信"={stock_industry[3,i]="communicate";factor_communicate[i]="yes"},
+            "石油石化"={stock_industry[3,i]="oil";factor_oil[i]="yes"},
+            "有色金属"={stock_industry[3,i]="coloredmetal";factor_coloredmetal[i]="yes"},
+            "农林牧渔"={stock_industry[3,i]="agriculture";factor_agriculture[i]="yes"},
+            "建筑"={stock_industry[3,i]="architecture";factor_architecture[i]="yes"},
+            "计算机"={stock_industry[3,i]="computer";factor_computer[i]="yes"},
+            "基础化工"={stock_industry[3,i]="chemical";factor_chemical[i]="yes"},
+            "煤炭"={stock_industry[3,i]="coal";factor_coal[i]="yes"},
+            "电力设备"={stock_industry[3,i]="electricequipment";factor_electricequipment[i]="yes"},
+            "国防军工"={stock_industry[3,i]="military";factor_military[i]="yes"},
+            "非银行金融"={stock_industry[3,i]="nonbank";factor_nonbank[i]="yes"},
+            "钢铁"={stock_industry[3,i]="steel";factor_steel[i]="yes"},
+            "传媒"={stock_industry[3,i]="media";factor_media[i]="yes"}
+          )
+}
+factornameen<-unique(stock_industry[3,])
+factorlist_industry<-rbind(factorlist_industry,factornameen)
+}
+savedata("factorlist_industry")
+savedata("stock_industry")
+#Initialize industry factors end#
+```
+### The first glance at industry factors
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=12,fig.width=12}
+temp<-as.numeric(tapply(stock_industry[3,],stock_industry[2,],length))
+pie(temp,labels=paste(sort(unique(stock_industry[3,])),":",temp),main="How many stocks are there in each industry(number)",radius=1,col=c(grey(0.7),grey(0.6),grey(0.5),grey(0.4),grey(0.8)))
+temp<-rbind(sizeweight_l,stock_industry)
+indusweight<-temp
+temp<-as.numeric(tapply(as.numeric(temp[1,]),temp[4,],sum))
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=14,fig.width=13}
+pie(temp,labels=sort(unique(stock_industry[3,])),main="How many stocks are there in each industry(Market Value)",radius=1,col=c(grey(0.7),grey(0.6),grey(0.5),grey(0.4),grey(0.8)))
+```
+
+###  sectioned portofolio backtest result
+
+For each factor, we group our samples into two portofolios: those stocks in this industry and all the others. And we observe their performance.
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=19,fig.width=13}
+#!Change the base index here!#
+par(mfrow=c(5,3))
+plotfactor_i<-function(factor,i){
+      t<-size
+      t[1,-1]<-as.numeric(factor)
+      for(i in 2:nrow(t)){
+            t[i,-1]<-t[1,-1]
+      }
+      factor<-t
+      groupnum=2
+      num_stock<-ncol(factor)-1
+      num_periods<-nrow(factor)
+      #Get startdate and end date
+      year<-substr(Sys.Date(),1,4)
+      year<-as.numeric(year)
+      year<-year-y
+      year<-as.character(year)
+      startdate<-paste0(year,"-01-01")
+      #end sub
+      close<-gain
+      plotdate<-as.character(close[,1])
+      plotdate<-c(startdate,plotdate)
+      plotdate<-plotdate[1:(length(plotdate)-1)]
+      plotdata<-RemoveNA(factor)
+      gain<-matrix(1,num_periods,groupnum)
+      gain_index<-matrix(1,num_periods,1)
+      gain_indicate<-matrix(1,num_periods-1,1)
+      adjustgain<-matrix(1,1,groupnum)
+      for(i in 1:(num_periods-1)){
+            gain_index[i+1]<-gain_index[i]*(1+zcf1_CLOSE_p[i+1]/100)
+            group<-factor[1,-1]
+            groupdata<-rbind(close[i+1,-1],plotdata[i,])
+            groupdata<-rbind(groupdata,group)
+            m<-tapply(as.numeric(groupdata[1,]),
+                      as.factor(as.numeric(groupdata[3,])),mean,na.rm=TRUE)
+            if(m[1]>m[2]){
+                 gain_indicate[i]<-0 
+            }
+            #group 2 is the factor "yes"
+            for(j in 1:groupnum){
+                  if(is.na(m[j])){
+                        m[j]<-1
+                        gain[i+1,j]<-gain[i,j]*m[j]
+                  }else{
+                        m[j]<-1+m[j]
+                        gain[i+1,j]<-gain[i,j]*m[j]
+                  }
+            }
+      }
+      for(j in 1:groupnum){
+            adjustgain[j]<-sqrt(var(gain[,j]))
+      }
+      output<-rbind()
+      output<-data.frame(industrygain=c(gain[num_periods,1],gain[num_periods,2]),volatility=c(adjustgain[1],adjustgain[2]),successrate=sum(gain_index)/length(gain_index))
+      par(mar=c(2,2,1,1),las=0)
+            plot(as.Date(plotdate),gain[,1],type="l",ylim=c(0,max(max(gain_index),max(gain))),col="grey",main=factornameen[i])
+            lines(as.Date(plotdate),gain[,2],col="blue")
+            lines(as.Date(plotdate),gain_index,col="red")
+            legend("topleft",legend=c("yes","no","index"),col=c("blue","black","red"),lty=1)
+#       output
+}    
+for(i in 1:15){
+#       print(factorname[i])
+      plotfactor_i(get(factorname[i]),i)
+}
+```
+
+\clearpage
+
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=19,fig.width=13}
+par(mfrow=c(5,3))
+for(i in 16:29){
+#       print(factorname[i])
+      plotfactor_i(get(factorname[i]),i)
+}
+par(mfrow=c(1,1))
+```
+
+\clearpage
+
+****************
+
+#### What does the plot mean  
+
+
+The blue line is the portofolio consist of stocks in that particular industry while the grey one is those outside this industry. The red line is the reference index of CSI 800. **Unlike CSI 800 which determines each component stock's weight according to their market value, the portofolios of mine give equal weights to each and every component stock. Hence the influence of size factor can be removed.**
+
+****************
+
+As we can tell from all plots, the industry factors do have obvious effect on stock payoff. However the way of influence varies with time and industries. It suggests that industry is a powerful yet not tame factor. The best option might be trying to exclude the influence of it rather than manipulating it.  
+
+### The cross-section regression result  
+
+We then use single factor regression model to precisely determine the significance level of industry factor.
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=19,fig.width=13}
+#1.Regression#
+#function to use#
+{
+regression_i<-function(factor,t_threshold,i){
+      t<-size
+      t[1,-1]<-as.numeric(factor)-1
+      for(i in 2:nrow(t)){
+            t[i,-1]<-t[1,-1]
+      }
+      factor<-t
+      #================#
+      #================#
+      plotdate<-as.character(factor[,1])
+      count<-0
+      sum_t<-0
+      sum_r<-0
+      regressdata<-RemoveNA(factor)
+      num.col<-as.numeric(ncol(regressdata))
+      num.row<-as.numeric(nrow(regressdata))
+      close1<-RemoveNA(gain)
+      timeline<-rep(0,(num.row-2))
+      efficientrow<-num.row-2
+      factorgain<-matrix(0,num.row,1)
+      for(i in 1:(num.row-2)){
+            if(sum(is.na(regressdata[i,]))>(0.5*length(regressdata[i,]))|sum(abs(regressdata[i,]))==0){
+                  efficientrow<-efficientrow-1##To determine if this data is meaningful
+                  timeline[i]<-1
+            }
+            else{
+                  regressdata[is.na(regressdata)]<-0
+                  lm_temp<-lm((as.numeric(close1[i,]))~as.numeric(regressdata[i,]),model=TRUE)
+                  if(nrow(summary(lm_temp)$coefficients)>=1){
+                        tvalue<-summary(lm_temp)$coefficients[2,3]
+                        factorgain[i]<-summary(lm_temp)$coefficients[2,1]
+                        if(abs(tvalue)>t_threshold){
+                              count<-count+1
+                              timeline[i]<-2
+                        }
+                        sum_t<-sum_t+abs(tvalue)
+                        sum_r<-abs(summary(lm_temp)$r.squared)+sum_r
+                  }else{
+                        efficientrow<-efficientrow-1
+                        timeline[i]<-1
+                  }}}
+      average<-sum_t/(efficientrow)
+      count<-count/(efficientrow)
+      sum_r<-sum_r/(efficientrow)
+      gain_factor<-matrix(1,num.row-1,1)
+      gain<-matrix(1,num.row-2,1)
+      sum_f<-0
+      for(i in 1:(num.row-2)){
+            sum_f<-sum_f+factorgain[i]
+            gain_factor[i+1]<-gain_factor[i]*(1+factorgain[i])
+            gain[i]<-factorgain[i]
+            
+      }
+      avg_f<-(sum_f/(efficientrow))
+      avg_f<-((1+avg_f)^12-1)*100
+      vol_f<-sqrt(var(gain[gain!=0]*100))*sqrt(12)
+      out<-data.frame(average_t_value=average,
+                      times_larger_than_threshold=count,rsquare=sum_r,
+                      average_factor_gain_year=avg_f,
+                      volatility_factor_gain=vol_f )
+      #plot
+      par(mar=c(2,2,1,1))
+      gain_index<-matrix(1,num.row-1,1)
+      for(i in 1:(num.row-2)){
+            gain_index[i+1]<-gain_index[i]*(1+zcf1_CLOSE_p[i+1]/100)
+      }
+      timeline<-c(1,timeline)
+      plot(as.Date(plotdate[-1]),timeline,type="p",ylim=c(0,max(max(gain_index),max(gain_factor))),main=factornameen[i])
+      lines(as.Date(plotdate[-1]),gain_index,col="red")
+      lines(as.Date(plotdate[-1]),gain_factor,col="blue")
+      legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+      points(as.Date(plotdate[-1]),timeline,type="p")
+}
+}
+par(mfrow=c(5,3))
+{
+for(i in 1:15){
+      regression_i(get(factorname[i]),2,i)
+}
+}
+```
+
+
+\clearpage
+
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",fig.height=19,fig.width=13}
+par(mfrow=c(5,3))
+for(i in 16:29){
+      regression_i(get(factorname[i]),2,i)
+}
+par(mfrow=c(1,1))
+```
+
+\clearpage
+
+****************
+
+#### What does the plot mean  
+
+The blue line is the performance of the factor yield generated from the regression model. The red line shows the performance of the referece index. Those points indicate whether this factor is effective at that time period or not. A point on the top edge suggests effective while a point at bottom suggests that the factor doesn't significantly influence the stock performance. A point in the middle suggests a missing value. 
+
+****************
+
+It's clear to see that industry performance vary largely from industry to industry. It agrees with the result of the backtest result that industry factor is too dangerous to manipulate. The best option is to maintain an industry-neutral portofolio.
+
+**Conclusion**  
+
+Industrial factor is an important component of factor model. However, it's too dangerous to play with. I strongly suggest to remain industry-neutral at all time.
+
+
+
+Industry        |                                       |              |
+----------------|---------------------------------------|--------------|-----
+WindCode:       |Citic                                  |T-value:      |2(avg)
+Effective:      |Unclear                                |Effective%:   |50%(avg)
+Way Of Effect:  |Unclear                                |FactorGain:   |Unclear
+MissingData%:   |0/23142                            
+
+\clearpage
+
+# Part Two: The Neutral Strategy Report  
+## What does this part try to do  
+Establishing a profitable neutral strategy is the main pursuit of this report. In order to achieve risk-neutral, a short position in stock index future market is taken. However, due to the rather limited choice of available futures to choose from, it's hard to find a perfect future. Actually, only three futures are available. They are IF whose underlying index is [HS 300](www.csindex.com.cn), IH whose underlying index is [SSE 50](www.sse.com.cn) and IC whose underlying index is [CSI 500](www.csindex.com.cn). In order to offer abundant stocks to choose from, I use both IC and IF to hedge and therefore set the initial stock pool to choose from as all components of **CSI 800**,which is the combination of **HS 300** and **CSI 500**. The weight distributed on each future contract is determined by their weight in **CSI800**. 
+I then calculate the indications of **CSI 800 Index** on each and every factor. After that, an optimization model is established to decide which stock to hold and how much position should be held. Historical data is used to solve this model by backtesting the strategy generated by this model. Optimization goal is to maximize the payoff and constraints include matching each factor's risk exposure of chosen long poistions to be equal to that of short position's(**CSI 800**'s). The exposure of industry factors and most factors are set to be zero while the risk exposure of those factors considered as profitable alpha factor by the first part of this report are allowed to deviate in a limited degree.  
+
+## Portofolio establishment strategy  
+Unlike most research within multi factors area which put most of effort in picking factors, I emphasize the importance of portofolio weight distribution. Only byy carefully distributed porto weight can the strategy achieve a decent hedge effect and thus limit the risk.  
+In order to hedge the risk in porto's long postions, we actually need an independent risk model. I have started to study this model on the basis of [Barra Risk Model](http:www.msci.com). However, it will not be covered until next report. **In this report, we don't estimate the variance of factors, instead, we use the factor loadings as its risk exposure and try to match the factor loadings of our porto with the short position's.(That's CSI 800 in our example.)** 
+
+## Method used in this model  
+Optimization method is applied to determine the weight distribution of assets in our porto. In this report, I am only going to cover a rather naive optimization which optimizes the weight distributed to each stock and set the optimization goal as to maximize the porto return while maintaining neutral in industry factor and trait factors. However, those effective alpha factors are allowed to deviate certain level from completely neutral.
+
+
+## Single factor exposure backtesting  
+
+First, I'm only going to show several examples in which all factors but one is being set to be neutral. The blue line in plot shows the performance of the porto determined by the optimization method. The "What does the plot mean" section will offer more details about the plots and how to interpret the outcomes.
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",eval=FALSE}
+library(parallel)
+library(foreach)
+library(doParallel)
+library(truncnorm)
+library(Rsolnp)
+
+tindex<-as.numeric(tapply(as.numeric(indusweight[1,]),as.character(indusweight[4,]),sum))
+getporto_final<-function(i){
+      library(truncnorm)
+      library(Rsolnp)
+         gainfun<-function(w){
+            -(as.numeric(0.2*w%*%as.numeric(gain[i-2,-1])+0.3*w%*%as.numeric(gain[i-1,-1])+0.5*w%*%as.numeric(gain[i,-1]))-(0.5*zcf1_CLOSE_p[i]/100+0.3*zcf1_CLOSE_p[i-1]/100+0.2*zcf1_CLOSE_p[i-2]/100))
+      }
+      equalcon<-function(w){
+            sum(w)
+      }
+      inequalcon<-function(w){
+            a<-0.5*((as.numeric((w)%*%as.numeric(beta[i,-1])))/(sizeweight_l%*%as.numeric(beta[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(beta[i-1,-1])))/(sizeweight_l%*%as.numeric(beta[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(beta[i-2,-1])))/(sizeweight_l%*%as.numeric(beta[i-2,-1]))-1)
+            b<-0.5*((as.numeric((w)%*%as.numeric(momentum[i,-1])))/(sizeweight_l%*%as.numeric(momentum[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(momentum[i-1,-1])))/(sizeweight_l%*%as.numeric(momentum[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(momentum[i-2,-1])))/(sizeweight_l%*%as.numeric(momentum[i-2,-1]))-1)
+            c<-0.5*((as.numeric((w)%*%as.numeric(size[i,-1])))/(sizeweight_l%*%as.numeric(size[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(size[i-1,-1])))/(sizeweight_l%*%as.numeric(size[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(size[i-2,-1])))/(sizeweight_l%*%as.numeric(size[i-2,-1]))-1)
+            d<-0.5*((as.numeric((w)%*%as.numeric(earningsyield[i,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(earningsyield[i-1,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(earningsyield[i-2,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i-2,-1]))-1)
+            e<-0.5*((as.numeric((w)%*%as.numeric(volatility[i,-1])))/(sizeweight_l%*%as.numeric(volatility[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(volatility[i-1,-1])))/(sizeweight_l%*%as.numeric(volatility[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(volatility[i-2,-1])))/(sizeweight_l%*%as.numeric(volatility[i-2,-1]))-1)
+            f<-0.5*((as.numeric((w)%*%as.numeric(growth[i,-1])))/(sizeweight_l%*%as.numeric(growth[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(growth[i-1,-1])))/(sizeweight_l%*%as.numeric(growth[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(growth[i-2,-1])))/(sizeweight_l%*%as.numeric(growth[i-2,-1]))-1)
+            g<-0.5*((as.numeric((w)%*%as.numeric(value[i,-1])))/(sizeweight_l%*%as.numeric(value[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(value[i-1,-1])))/(sizeweight_l%*%as.numeric(value[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(value[i-2,-1])))/(sizeweight_l%*%as.numeric(value[i-2,-1]))-1)
+            h<-0.5*((as.numeric((w)%*%as.numeric(leverage[i,-1])))/(sizeweight_l%*%as.numeric(leverage[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(leverage[i-1,-1])))/(sizeweight_l%*%as.numeric(leverage[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(leverage[i-2,-1])))/(sizeweight_l%*%as.numeric(leverage[i-2,-1]))-1)
+            i<-0.5*((as.numeric((w)%*%as.numeric(news[i,-1])))/(sizeweight_l%*%as.numeric(news[i,-1]))-1)+0.3*((as.numeric((w)%*%as.numeric(news[i-1,-1])))/(sizeweight_l%*%as.numeric(news[i-1,-1]))-1)+0.2*((as.numeric((w)%*%as.numeric(news[i-2,-1])))/(sizeweight_l%*%as.numeric(news[i-2,-1]))-1)
+            tt<-rbind(as.numeric(w),indusweight[4,])
+            treal<-as.numeric(tapply(as.numeric(tt[1,]),as.character(tt[2,]),sum))
+            industry<-sum(abs(treal-tindex))
+            a<-removeNA(a)
+            b<-removeNA(b)
+            c<-removeNA(c)
+            d<-removeNA(d)
+            e<-removeNA(e)
+            f<-removeNA(f)
+            g<-removeNA(g)
+            h<-removeNA(h)
+            i<-removeNA(i)
+            industry<-removeNA(industry)
+            return(c(a,b,c,d,e,f,g,h,i,industry))
+      }
+      portofolio<-solnp(pars=rep(1/num.stock,num.stock),fun=gainfun
+                        ,eqfun=equalcon,eqB=1,ineqfun=inequalcon
+                        ,ineqLB=(c(-0.01,0.5,-0.01,-0.5,-0.01,-0.01,0.5,-0.01,-0.01,0.01))
+                        ,ineqUB=(c(0.01,1.5,0.01,0.5,0.01,0.01,1.5,0.01,0.01,0.01)),
+                        LB=rep(0,num.stock),UB=rep(1,num.stock))
+      print(i)     
+      return(portofolio$par)
+}
+cl <- makeCluster(4)
+registerDoParallel(cl)
+testmulti_final<- foreach(x=3:31,.combine='rbind') %dopar% getporto_final(x)
+stopCluster(cl)
+```
+
+```{r,cache=TRUE,echo=FALSE}
+#
+ load("C:/Users/shixi19/Desktop/916Recover.RData")
+
+```
+
+\clearpage 
+
+## Backtest Result  
+
+### Example: Value Exposure Model  
+
+```{r,cache=TRUE,warning=FALSE,echo=FALSE,comment=""}
+
+
+#Check change rate
+changepositionrate<-function(factorname){
+total<-0
+factor<-get(factorname)
+for(i in 1:(nrow(factor)-1)){
+      print(paste0("Period",i,":"))
+      print(sum(abs(factor[i+1,-1]-factor[i,-1])))
+      ##Calculate both in and out
+      ##hypothesis is buying has the same cost as selling
+      total<-total+sum(abs(factor[2,-1]-factor[1,-1]))
+}
+print("Total:")
+print(total)
+}
+
+#Load data
+ase1<-readdata("testmulti_value")
+ase1<-as.matrix(ase1)
+
+#final
+#Prep before plot
+gain_extra<-rep(0,(nrow(growth)-4))
+factor_actual<-matrix(0,(nrow(growth)-4),9)
+for(i in 1:(nrow(beta)-4)){ 
+      gainfun_real<-function(w){
+            -(as.numeric(w%*%as.numeric(gain[i+3,-1]))-zcf1_CLOSE_p[i+3]/100)
+      }
+      inequalcon_real<-function(w){
+            a<-(as.numeric((w)%*%as.numeric(beta[i+3,-1])))/(sizeweight_l%*%as.numeric(beta[i+3,-1]))-1
+            b<-(as.numeric((w)%*%as.numeric(momentum[i+3,-1])))/(sizeweight_l%*%as.numeric(momentum[i+3,-1]))-1
+            c<-(as.numeric((w)%*%as.numeric(size[i+3,-1])))/(sizeweight_l%*%as.numeric(size[i+3,-1]))-1
+            d<-(as.numeric((w)%*%as.numeric(earningsyield[i+3,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i+3,-1]))-1
+            e<-(as.numeric((w)%*%as.numeric(volatility[i+3,-1])))/(sizeweight_l%*%as.numeric(volatility[i+3,-1]))-1
+            f<-(as.numeric((w)%*%as.numeric(growth[i+3,-1])))/(sizeweight_l%*%as.numeric(growth[i+3,-1]))-1
+            g<-(as.numeric((w)%*%as.numeric(value[i+3,-1])))/(sizeweight_l%*%as.numeric(value[i+3,-1]))-1
+            h<-(as.numeric((w)%*%as.numeric(leverage[i+3,-1])))/(sizeweight_l%*%as.numeric(leverage[i+3,-1]))-1
+            i<-(as.numeric((w)%*%as.numeric(news[i+3,-1])))/(sizeweight_l%*%as.numeric(news[i+3,-1]))-1
+            return(c(a,b,c,d,e,f,g,h,i))
+      }
+      factor_actual[i,]<-inequalcon_real(ase1[i,])#actual beta
+      gain_extra[i]<-(-gainfun_real(ase1[i,]))#actual gain
+}
+      
+factor_avg<-apply(factor_actual,2,mean)
+gain_avg<-sum(gain_extra)/(nrow(beta)-4)
+#plot
+par(mfrow=c(1,1),mar=c(3,2,1,1))
+gain_index<-matrix(1,num.row-3,1)
+gain_factor<-matrix(1,num.row-3,1)
+for(j in 1:(num.row-4)){
+      gain_index[j+1]<-gain_index[j]*(1+zcf1_CLOSE_p[j+3]/100)
+      gain_factor[j+1]<-gain_factor[j]+gain_extra[j]
+}
+for(k in 1:length(factor_actual)){
+      if(factor_actual[k]>=0){
+            factor_actual[k]<-1
+      }else{
+            factor_actual[k]<-0
+      }
+      
+}
+factor_actual<-c(0.5,factor_actual)
+for(k in 1:length(gain_extra)){
+      if(gain_extra[k]>=0){
+            gain_extra[k]<-1
+      }else{
+            gain_extra[k]<-0
+      }
+      
+}
+winratio<-sum(gain_extra)/length(gain_extra)
+out<-data.frame(gain_extra=gain_avg,win_ratio=winratio,final=gain_factor[length(gain_factor)])
+gain_extra<-c(0.5,gain_extra)
+plot(as.Date(plotdate[3:32]),gain_extra,type="p",ylim=c(-0.5,3),pch=45,col="red"
+     ,xlab="",ylab="",main="Portofolio Performance")
+lines(as.Date(plotdate[3:32]),gain_index,col="red")
+lines(as.Date(plotdate[3:32]),gain_factor,col="blue")
+legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+print(out)
+```
+
+****************
+#### What does the plot mean  
+
+These plots shows the performance of our portofolios. The blue is the performance of our portofolio. The redline is the reference performance of index. The red dot indicates whether our portofolio performs stronger or weaker than index at that particular month. A dot above means porto stronger than index, a dot below means porto performs weaker than index and a dot in middle means porto performs exactly the same as index. 
+The table below the plots shows the performance in number. Gain_extra is the average monthly extra gain of our porto. Win-ratio indicates for how many periods is our porto performing stronger than index. The last row shows the final value of our porto.
+
+****************
+
+Value Exposure Portofolio let the factor value to have a risk exposure within minus one to one standard deviation. The result shows that this porto doen't perform so good. Despite the relative small flucuation, it fails to get enough profit and the win ratio is not satisfying. The turning rate of this porto is 279% with in 32 months.
+
+### Example: Expectation Exposure Model  
+
+```{r,cache=TRUE,warning=FALSE,echo=FALSE,comment=""}
+
+
+#Check change rate
+changepositionrate<-function(factorname){
+total<-0
+factor<-get(factorname)
+for(i in 1:(nrow(factor)-1)){
+      print(paste0("Period",i,":"))
+      print(sum(abs(factor[i+1,-1]-factor[i,-1])))
+      ##Calculate both in and out
+      ##hypothesis is buying has the same cost as selling
+      total<-total+sum(abs(factor[2,-1]-factor[1,-1]))
+}
+print("Total:")
+print(total)
+}
+
+#Load data
+ase1<-readdata("testmulti_expectation")
+ase1<-as.matrix(ase1)
+
+#final
+#Prep before plot
+gain_extra<-rep(0,(nrow(growth)-4))
+factor_actual<-matrix(0,(nrow(growth)-4),9)
+for(i in 1:(nrow(beta)-4)){ 
+      gainfun_real<-function(w){
+            -(as.numeric(w%*%as.numeric(gain[i+3,-1]))-zcf1_CLOSE_p[i+3]/100)
+      }
+      inequalcon_real<-function(w){
+            a<-(as.numeric((w)%*%as.numeric(beta[i+3,-1])))/(sizeweight_l%*%as.numeric(beta[i+3,-1]))-1
+            b<-(as.numeric((w)%*%as.numeric(momentum[i+3,-1])))/(sizeweight_l%*%as.numeric(momentum[i+3,-1]))-1
+            c<-(as.numeric((w)%*%as.numeric(size[i+3,-1])))/(sizeweight_l%*%as.numeric(size[i+3,-1]))-1
+            d<-(as.numeric((w)%*%as.numeric(earningsyield[i+3,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i+3,-1]))-1
+            e<-(as.numeric((w)%*%as.numeric(volatility[i+3,-1])))/(sizeweight_l%*%as.numeric(volatility[i+3,-1]))-1
+            f<-(as.numeric((w)%*%as.numeric(growth[i+3,-1])))/(sizeweight_l%*%as.numeric(growth[i+3,-1]))-1
+            g<-(as.numeric((w)%*%as.numeric(value[i+3,-1])))/(sizeweight_l%*%as.numeric(value[i+3,-1]))-1
+            h<-(as.numeric((w)%*%as.numeric(leverage[i+3,-1])))/(sizeweight_l%*%as.numeric(leverage[i+3,-1]))-1
+            i<-(as.numeric((w)%*%as.numeric(news[i+3,-1])))/(sizeweight_l%*%as.numeric(news[i+3,-1]))-1
+            return(c(a,b,c,d,e,f,g,h,i))
+      }
+      factor_actual[i,]<-inequalcon_real(ase1[i,])#actual beta
+      gain_extra[i]<-(-gainfun_real(ase1[i,]))#actual gain
+}
+      
+factor_avg<-apply(factor_actual,2,mean)
+gain_avg<-sum(gain_extra)/(nrow(beta)-4)
+#plot
+par(mfrow=c(1,1),mar=c(3,2,1,1))
+gain_index<-matrix(1,num.row-3,1)
+gain_factor<-matrix(1,num.row-3,1)
+for(j in 1:(num.row-4)){
+      gain_index[j+1]<-gain_index[j]*(1+zcf1_CLOSE_p[j+3]/100)
+      gain_factor[j+1]<-gain_factor[j]+gain_extra[j]
+}
+for(k in 1:length(factor_actual)){
+      if(factor_actual[k]>=0){
+            factor_actual[k]<-1
+      }else{
+            factor_actual[k]<-0
+      }
+      
+}
+factor_actual<-c(0.5,factor_actual)
+for(k in 1:length(gain_extra)){
+      if(gain_extra[k]>=0){
+            gain_extra[k]<-1
+      }else{
+            gain_extra[k]<-0
+      }
+      
+}
+winratio<-sum(gain_extra)/length(gain_extra)
+out<-data.frame(gain_extra=gain_avg,win_ratio=winratio,final=gain_factor[length(gain_factor)])
+gain_extra<-c(0.5,gain_extra)
+plot(as.Date(plotdate[3:32]),gain_extra,type="p",ylim=c(-0.5,3),pch=45,col="red"
+     ,xlab="",ylab="",main="Portofolio Performance")
+lines(as.Date(plotdate[3:32]),gain_index,col="red")
+lines(as.Date(plotdate[3:32]),gain_factor,col="blue")
+legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+print(out)
+```
+
+Expectation Exposure Portofolio let the factor expectation to have a risk exposure within minus one to one standard deviation. The result shows that this porto doen't perform so good. Despite the relative small flucuation, it fails to get enough profit. The turning rate of this porto is 209% with in 32 months.
+
+
+### Example: Momentum Exposure Model  
+
+```{r,cache=TRUE,warning=FALSE,echo=FALSE,comment=""}
+
+
+#Check change rate
+changepositionrate<-function(factorname){
+total<-0
+factor<-get(factorname)
+for(i in 1:(nrow(factor)-1)){
+      print(paste0("Period",i,":"))
+      print(sum(abs(factor[i+1,-1]-factor[i,-1])))
+      ##Calculate both in and out
+      ##hypothesis is buying has the same cost as selling
+      total<-total+sum(abs(factor[2,-1]-factor[1,-1]))
+}
+print("Total:")
+print(total)
+}
+
+#Load data
+ase1<-readdata("testmulti_momentum")
+ase1<-as.matrix(ase1)
+
+#final
+#Prep before plot
+gain_extra<-rep(0,(nrow(growth)-4))
+factor_actual<-matrix(0,(nrow(growth)-4),9)
+for(i in 1:(nrow(beta)-4)){ 
+      gainfun_real<-function(w){
+            -(as.numeric(w%*%as.numeric(gain[i+3,-1]))-zcf1_CLOSE_p[i+3]/100)
+      }
+      inequalcon_real<-function(w){
+            a<-(as.numeric((w)%*%as.numeric(beta[i+3,-1])))/(sizeweight_l%*%as.numeric(beta[i+3,-1]))-1
+            b<-(as.numeric((w)%*%as.numeric(momentum[i+3,-1])))/(sizeweight_l%*%as.numeric(momentum[i+3,-1]))-1
+            c<-(as.numeric((w)%*%as.numeric(size[i+3,-1])))/(sizeweight_l%*%as.numeric(size[i+3,-1]))-1
+            d<-(as.numeric((w)%*%as.numeric(earningsyield[i+3,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i+3,-1]))-1
+            e<-(as.numeric((w)%*%as.numeric(volatility[i+3,-1])))/(sizeweight_l%*%as.numeric(volatility[i+3,-1]))-1
+            f<-(as.numeric((w)%*%as.numeric(growth[i+3,-1])))/(sizeweight_l%*%as.numeric(growth[i+3,-1]))-1
+            g<-(as.numeric((w)%*%as.numeric(value[i+3,-1])))/(sizeweight_l%*%as.numeric(value[i+3,-1]))-1
+            h<-(as.numeric((w)%*%as.numeric(leverage[i+3,-1])))/(sizeweight_l%*%as.numeric(leverage[i+3,-1]))-1
+            i<-(as.numeric((w)%*%as.numeric(news[i+3,-1])))/(sizeweight_l%*%as.numeric(news[i+3,-1]))-1
+            return(c(a,b,c,d,e,f,g,h,i))
+      }
+      factor_actual[i,]<-inequalcon_real(ase1[i,])#actual beta
+      gain_extra[i]<-(-gainfun_real(ase1[i,]))#actual gain
+}
+      
+factor_avg<-apply(factor_actual,2,mean)
+gain_avg<-sum(gain_extra)/(nrow(beta)-4)
+#plot
+par(mfrow=c(1,1),mar=c(3,2,1,1))
+gain_index<-matrix(1,num.row-3,1)
+gain_factor<-matrix(1,num.row-3,1)
+for(j in 1:(num.row-4)){
+      gain_index[j+1]<-gain_index[j]*(1+zcf1_CLOSE_p[j+3]/100)
+      gain_factor[j+1]<-gain_factor[j]+gain_extra[j]
+}
+for(k in 1:length(factor_actual)){
+      if(factor_actual[k]>=0){
+            factor_actual[k]<-1
+      }else{
+            factor_actual[k]<-0
+      }
+      
+}
+factor_actual<-c(0.5,factor_actual)
+for(k in 1:length(gain_extra)){
+      if(gain_extra[k]>=0){
+            gain_extra[k]<-1
+      }else{
+            gain_extra[k]<-0
+      }
+      
+}
+winratio<-sum(gain_extra)/length(gain_extra)
+out<-data.frame(gain_extra=gain_avg,win_ratio=winratio,final=gain_factor[length(gain_factor)])
+gain_extra<-c(0.5,gain_extra)
+plot(as.Date(plotdate[3:32]),gain_extra,type="p",ylim=c(-0.5,3),pch=45,col="red"
+     ,xlab="",ylab="",main="Portofolio Performance")
+lines(as.Date(plotdate[3:32]),gain_index,col="red")
+lines(as.Date(plotdate[3:32]),gain_factor,col="blue")
+legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+print(out)
+```
+
+Momentum Exposure Portofolio let the factor momentum to have a risk exposure within minus one to one standard deviation. The result shows that this porto performs OK. It generates 54% of profit in 33 months and the win ratio is close to 60%. However, the turning ratio of this porto is up to 737% which is too high. 
+
+
+### Comprehensive Model  Performance  
+
+```{r,cache=TRUE,warning=FALSE,echo=FALSE,comment=""}
+
+
+#Check change rate
+changepositionrate<-function(factorname){
+total<-0
+factor<-get(factorname)
+for(i in 1:(nrow(factor)-1)){
+      print(paste0("Period",i,":"))
+      print(sum(abs(factor[i+1,-1]-factor[i,-1])))
+      ##Calculate both in and out
+      ##hypothesis is buying has the same cost as selling
+      total<-total+sum(abs(factor[2,-1]-factor[1,-1]))
+}
+print("Total:")
+print(total)
+}
+
+#Load data
+ase1<-readdata("testmulti_final")
+ase1<-as.matrix(ase1)
+
+#final
+#Prep before plot
+gain_extra<-rep(0,(nrow(growth)-4))
+factor_actual<-matrix(0,(nrow(growth)-4),9)
+for(i in 1:(nrow(beta)-4)){ 
+      gainfun_real<-function(w){
+            -(as.numeric(w%*%as.numeric(gain[i+3,-1]))-zcf1_CLOSE_p[i+3]/100)
+      }
+      inequalcon_real<-function(w){
+            a<-(as.numeric((w)%*%as.numeric(beta[i+3,-1])))/(sizeweight_l%*%as.numeric(beta[i+3,-1]))-1
+            b<-(as.numeric((w)%*%as.numeric(momentum[i+3,-1])))/(sizeweight_l%*%as.numeric(momentum[i+3,-1]))-1
+            c<-(as.numeric((w)%*%as.numeric(size[i+3,-1])))/(sizeweight_l%*%as.numeric(size[i+3,-1]))-1
+            d<-(as.numeric((w)%*%as.numeric(earningsyield[i+3,-1])))/(sizeweight_l%*%as.numeric(earningsyield[i+3,-1]))-1
+            e<-(as.numeric((w)%*%as.numeric(volatility[i+3,-1])))/(sizeweight_l%*%as.numeric(volatility[i+3,-1]))-1
+            f<-(as.numeric((w)%*%as.numeric(growth[i+3,-1])))/(sizeweight_l%*%as.numeric(growth[i+3,-1]))-1
+            g<-(as.numeric((w)%*%as.numeric(value[i+3,-1])))/(sizeweight_l%*%as.numeric(value[i+3,-1]))-1
+            h<-(as.numeric((w)%*%as.numeric(leverage[i+3,-1])))/(sizeweight_l%*%as.numeric(leverage[i+3,-1]))-1
+            i<-(as.numeric((w)%*%as.numeric(news[i+3,-1])))/(sizeweight_l%*%as.numeric(news[i+3,-1]))-1
+            return(c(a,b,c,d,e,f,g,h,i))
+      }
+      factor_actual[i,]<-inequalcon_real(ase1[i,])#actual beta
+      gain_extra[i]<-(-gainfun_real(ase1[i,]))#actual gain
+}
+      
+factor_avg<-apply(factor_actual,2,mean)
+gain_avg<-sum(gain_extra)/(nrow(beta)-4)
+#plot
+par(mfrow=c(1,1),mar=c(3,2,1,1))
+gain_index<-matrix(1,num.row-3,1)
+gain_factor<-matrix(1,num.row-3,1)
+for(j in 1:(num.row-4)){
+      gain_index[j+1]<-gain_index[j]*(1+zcf1_CLOSE_p[j+3]/100)
+      gain_factor[j+1]<-gain_factor[j]+gain_extra[j]
+}
+for(k in 1:length(factor_actual)){
+      if(factor_actual[k]>=0){
+            factor_actual[k]<-1
+      }else{
+            factor_actual[k]<-0
+      }
+      
+}
+factor_actual<-c(0.5,factor_actual)
+for(k in 1:length(gain_extra)){
+      if(gain_extra[k]>=0){
+            gain_extra[k]<-1
+      }else{
+            gain_extra[k]<-0
+      }
+      
+}
+winratio<-sum(gain_extra)/length(gain_extra)
+out<-data.frame(gain_extra=gain_avg,win_ratio=winratio,final=gain_factor[length(gain_factor)])
+gain_extra<-c(0.5,gain_extra)
+plot(as.Date(plotdate[3:32]),gain_extra,type="p",ylim=c(-0.5,3),pch=45,col="red"
+     ,xlab="",ylab="",main="Portofolio Performance")
+lines(as.Date(plotdate[3:32]),gain_index,col="red")
+lines(as.Date(plotdate[3:32]),gain_factor,col="blue")
+legend("topleft",col=c("red","blue"),lty=1,legend=c("index","factor"))
+print(out)
+```
+
+This Portofolio is the final outcome of this report. It lets the effective alpha factors we determined in the first part to have a risk exposure within minus one to one standard deviation. The result shows that this porto performs rather well. It has created almost 30% profit in 32 months. And the turing rate is 354% in 32 months which is acceptable.  
+
+\clearpage
+
+## Conclusion and further research plan  
+This report is the first report of the multi-factor research. It mainly establishs the very foundation of multi-factor analyzation system. The strategy offered here hasn't been carefully studied and those factors used aren't those most up to date.  
+The following research will focus on three aspects:  
+
+* First, a structured risk model is going to be included in our system. I will build a risk model and thus distinguishing between risk factors and profit factors. By applying the risk model, the constraint of risk exposure will be much better and it shall give us more confident in amplify alpha gain.  
+
+* Second, new and rarely discussed alpha factors are going to be discovered. Since the profit of this model mainly comes from effective alpha factors. And those factors being studied by lots of people will quickly lose the ability to generate profit. Consequently, the search for alpha factors will always be necessary.  
+
+* Third, strategy is going to be studied in a more detailed way. I may study the pattern of factors being effective and try to conclude the suitable market situations for each factor. 

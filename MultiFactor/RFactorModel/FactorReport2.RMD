@@ -1,0 +1,660 @@
+---
+title: "FactorReport2"
+author: "MarkHE"
+date: "Sunday, September 20, 2015"
+output: pdf_document
+---
+
+First,let's point out the colinearity inside factors. 
+```{r,cache=TRUE,echo=FALSE}
+load("C:/Users/shixi19/Desktop/data_for_part2.RData")
+cordata<-data.frame(beta=betagain,momentum=momentumgain,size=sizegain,value=valuegain,vol=volatilitygain,growth=growthgain,exp=expectationgain,leverage=leveragegain,news=newsgain)
+cor(cordata)
+```
+
+Read in Data
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment="",results='hide'}
+#Preparation#
+#=============================================================================#
+{
+setwd("C:\\Users\\shixi19\\Desktop\\RFactorModel")
+library(WindR)
+w.start(showmenu=F)
+#options(warn=-1)
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#=============================================================================#
+#Public functions#
+{
+savedata<-function(x){
+      write.csv(get(x),file=paste0("C:\\Users\\shixi19\\Desktop\\FactorData2\\",x,".csv"))
+}##give the name of the variable as a character 
+readdata<-function(x){
+      data<-read.csv(file=paste0("C:\\Users\\shixi19\\Desktop\\FactorData2\\",x,".csv"))
+      data<-data[,-1]
+      names(data)<-substr(names(data),2,10)
+      return(data)
+}##give the name of the variable as a character 
+startdatefun<-function(y){
+year<-substr(Sys.Date(),1,4)
+year<-as.numeric(year)
+year<-year-y
+year<-as.character(year)
+startdate<-paste0(year,"0101")
+startdate}
+startdatefunwithhash<-function(y){
+year<-substr(Sys.Date(),1,4)
+year<-as.numeric(year)
+year<-year-y
+year<-as.character(year)
+startdate<-paste0(year,"-01-01")
+return(startdate)}
+startdatefunwithnohash<-function(y){
+      year<-substr(Sys.Date(),1,4)
+      year<-as.numeric(year)
+      year<-year-y
+      year<-as.character(year)
+      startdate<-paste0(year,"0101")
+      return(startdate)}
+#Read in all A stocks at the time of startdate and follow the industry 
+#classification of citic 
+stocklistfun<-function(y){
+      startdate<-startdatefun(y)
+#       stocklist<-w.wset('SectorConstituent',
+#                         paste0('date=',startdate,';sectorId=a001010100000000'))
+#      stocklist<-w.wset('SectorConstituent',
+#                        paste0('date=',startdate,';windcode=000300.SH'))
+        stocklist<-w.wset('SectorConstituent',
+                          paste0('date=',startdate,';windcode=000906.SH'))
+      stock<-stocklist$Data$wind_code#Get the code for all A stock
+      stockname<-stocklist$Data$sec_name#Get the name for all A stock
+      industrycode<-w.wss(stock,'industry_citiccode,industry_citic',
+        paste0('tradeDate=',startdate),'industryType=1')$Data$INDUSTRY_CITICCODE
+      industryname<-w.wss(stock,'industry_citiccode,industry_citic',
+        paste0('tradeDate=',startdate),'industryType=1')$Data$INDUSTRY_CITIC
+      stock_industry<-rbind(stock,industrycode,industryname)
+      stock_industry<-stock_industry[,stock_industry[3,]!="NaN"]
+      stock_industry
+}#Change the initial stock pool here!#
+removeNA<-function(data){
+      data[is.na(data)]=0
+      data
+}
+standard<-function(data){
+      getmid<-apply(data[,-1],1,median,na.rm=TRUE)
+      getmid<-removeNA(getmid)#Since we have set apply function as na.rm=TRUE,Here we can let         
+      #na equals zero because they must come from those row with straight NA
+      middistance<-abs(data[,-1]-getmid)
+      mid<-apply(middistance,1,median,na.rm=TRUE)
+      mid<-removeNA(mid)
+      data1<-data[,-1]
+      data1<-removeNA(data1)
+      for(i in 1:length(getmid)){
+            
+            data1[i,data1[i,]-getmid[i]>3*abs(mid[i])]<-getmid[i]+3*abs(mid[i])
+            data1[i,data1[i,]-getmid[i]<(-3*abs(mid[i]))]<-getmid[i]+(-3*abs(mid[i]))
+            
+      }
+      data[,-1]<-data1
+       getmean<-apply(data[,-1],1,mean,na.rm=TRUE)
+      getmean<-removeNA(getmean)
+      data[,-1]<-data[,-1]-getmean
+      getvar<-apply(data[,-1],1,var,na.rm=TRUE)
+      getvar[is.na(getvar)]<-1
+      getvar[getvar==0]<-1
+      data[,-1]<-data[,-1]/sqrt(getvar)
+      data
+}
+standard_m<-function(data){##No standard only remove extremes
+      getmid<-apply(data[,-1],1,median,na.rm=TRUE)
+      getmid<-removeNA(getmid)#Since we have set apply function as na.rm=TRUE,Here we can let         
+      #na equals zero because they must come from those row with straight NA
+      middistance<-abs(data[,-1]-getmid)
+      mid<-apply(middistance,1,median,na.rm=TRUE)
+      mid<-removeNA(mid)
+      data1<-data[,-1]
+      data1<-removeNA(data1)
+      for(i in 1:length(getmid)){
+            
+            data1[i,data1[i,]-getmid[i]>3*abs(mid[i])]<-getmid[i]+3*abs(mid[i])
+            data1[i,data1[i,]-getmid[i]<(-3*abs(mid[i]))]<-getmid[i]+(-3*abs(mid[i]))
+            
+      }
+      data[,-1]<-data1
+      data
+}
+RemoveNA<-function(x){
+      x<-x[,-1]
+      x[is.na(x)]<-0
+      x
+}
+sizeweight<-function(stocklist){
+      weight<-w.wss(stocklist,'total_shares',paste0('tradeDate=',Sys.Date()))$Data$TOTAL_SHARES
+      tot<-sum(weight)
+      weight<-weight/tot
+      weight
+}
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Determine the public variables#
+#=============================================================================#
+y<-2
+#This indicates how many years to look back which has to be less than 10
+#Strongly suggest to set y<-2 since the data of expected level are available
+#since 2013
+#-----------------------------------------------------------------------------#
+stock_industry<-stocklistfun(y)
+stocklist<-stock_industry[1,]#Use it too often so that I list it seperately
+num.industry<-as.numeric(length(unique(stock_industry[3,])))
+num.stock<-as.numeric(length(stock_industry[1,]))
+#checkdate<-datepoint(y)
+savedata("stocklist")
+sizeweight_l<-sizeweight(stocklist)
+#=============================================================================#
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#=============================================================================#
+#Functions to use#
+{
+# stockperform250day<-function(stocklist,checkdate){
+#       data<-w.wsd(stocklist,"pct_chg","ED-250D",
+#             checkdate,"Fill=Previous;PriceAdj=F")$Data
+#       data<-removeNA(data)
+#       data
+# }
+# indexperform250day<-function(indexname,checkdate){
+#       data<-w.wsd(as.character(indexname),"pct_chg","ED-250D",checkdate
+#             ,"Fill=Previous;PriceAdj=F")$Data
+#       data<-removeNA(data)
+#       data
+#}#indexname:"000300.SH"or"000906.SH"
+weight<-function(num,groupnum){
+      weight<-rep(1:groupnum,each=ceiling(num/groupnum))
+      weight<-weight[1:num]
+      sum<-sum(weight)
+      weight<-weight/sum
+      weight
+}
+# stockperformance<-stockperform250day(stocklist,checkdate)
+# indexperformance<-indexperformance250day("000300.SH",checkdate)
+
+#Gain#
+gainf<-function(y,stocklist){
+      data<-w.wsd(stocklist,"pct_chg",startdatefunwithhash(y),Sys.Date()
+            ,"Fill=Previous;PriceAdj=F")$Data
+      data[,-1]<-data[,-1]/100
+      data<-removeNA(data)
+      data
+}
+#Beta#
+betafun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"beta_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("beta missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Momentum#
+momentumfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"annualyeild_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("momentum missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]/100
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Size#
+sizefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"total_shares",startdatefunwithhash(y),Sys.Date(),
+            "Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("size missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data[,-1]<-log10(data[,-1])
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+#Earnings Yield#
+eroefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_avgroe_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eroe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+eepsfun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_eps_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eeps missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+pefun<-function(y,stocklist){
+      data<-w.wsd(stocklist,"rating_avg",startdatefunwithhash(y),Sys.Date(),
+                  "Fill=Previous;PriceAdj=F")$Data
+#        print(paste0("pe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard(data)
+      data<-removeNA(data)
+      data
+}
+
+}
+```
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Read in Data#
+#Performance#
+{
+gain<-gainf(y,stocklist)
+}
+savedata("gain")
+#Beta#
+{
+      beta<-betafun(y,stocklist)
+}
+savedata("beta")
+#Momentum#
+{
+momentum<-momentumfun(y,stocklist)
+}
+savedata("momentum")
+#Size#
+{
+size<-sizefun(y,stocklist)
+}
+savedata("size")
+#Expectation#
+{
+#Read in sub factors#
+{
+eroe<-eroefun(y,stocklist)
+eeps<-eepsfun(y,stocklist)
+pe<-pefun(y,stocklist)
+}
+}
+savedata("eroe")
+savedata("eeps")
+savedata("pe")
+{#Optimization#
+{
+calgain<-function(variables,eroe,eeps,pe){
+  gain=eroe
+  gain[,-1]=variables[1]*(eroe[,-1])+variables[2]*(eeps[,-1])+variables[3]*(pe[,-1])
+  gain<-removeNA(gain)
+  gain
+}
+
+difference<-function(variables,eroe,eeps,pe,real){
+      diff<-sum(((real[,-1])-calgain(variables,eroe,eeps,pe)[,-1])^2)
+      diff<-removeNA(diff)
+      diff
+}
+variables<-c(1,1,1)
+optimresult<-optim(variables,difference,eroe=eroe[-nrow(eroe),],
+                   eeps=eeps[-nrow(eeps),],pe=pe[-nrow(pe),],real=gain[-1,])
+subweight<-optimresult$par
+}
+#Generate Earnings Yield#
+earningsyield<-calgain(subweight,eroe,eeps,pe)
+earningsyield<-standard(earningsyield)
+expectation<-earningsyield
+}
+savedata("expectation")
+
+```
+
+
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#!Change the base index here!##There is another at the latter part!#
+{
+      zcf1_CLOSE_p<-w.wsd("000906.SH","pct_chg",startdatefunwithhash(y),
+                          Sys.Date(),"Fill=Previous;PriceAdj=F")$Data$PCT_CHG
+       zcf1_CLOSE_p_m<-w.wsd("000906.SH","pct_chg",startdatefunwithhash(y),
+                          Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data$PCT_CHG
+}
+savedata("zcf1_CLOSE_p")
+```
+# I have put the month and week date here! But how to use...
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+data<-w.wsd(stocklist,"pct_chg",startdatefunwithhash(y),Sys.Date(),"Period=M;Fill=Previous;PriceAdj=F")$Data
+data[,-1]<-data[,-1]/100
+monthgain<-removeNA(data)
+monthdate<-monthgain[,1]
+data<-w.wsd(stocklist,"pct_chg",startdatefunwithhash(y),Sys.Date(),"Period=W;Fill=Previous;PriceAdj=F")$Data
+data[,-1]<-data[,-1]/100
+weekgain<-removeNA(data)
+weekdate<-weekgain[,1]
+plotdate<-beta[,1]
+```
+
+#Monthly data
+```{r,cache=TRUE,warning=TRUE,echo=FALSE,comment=""}
+#Gain#
+gainf_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"pct_chg",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+      data[,-1]<-data[,-1]/100
+      data<-removeNA(data)
+      data
+}
+#Beta#
+betafun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"beta_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("beta missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+#Momentum#
+momentumfun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"annualyeild_100w",startdatefunwithhash(y),Sys.Date()
+            ,"Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("momentum missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data[,-1]<-data[,-1]/100
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+#Size#
+sizefun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"total_shares",startdatefunwithhash(y),Sys.Date(),
+            "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("size missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-removeNA(data)
+      data[,-1]<-log10(data[,-1])
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+#Earnings Yield#
+eroefun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_avgroe_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eroe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+eepsfun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"west_eps_FY1",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#       print(paste0("eeps missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+pefun_m<-function(y,stocklist){
+      data<-w.wsd(stocklist,"rating_avg",startdatefunwithhash(y),Sys.Date(),
+                  "Period=M;Fill=Previous;PriceAdj=F")$Data
+#        print(paste0("pe missing value:",sum(is.na(data)),"/",nrow(data)*ncol(data)))
+      data<-standard_m(data)
+      data<-removeNA(data)
+      data
+}
+#Read in Data#
+#Performance#
+{
+gain_m<-gainf_m(y,stocklist)
+}
+#Beta#
+{
+beta_m<-betafun_m(y,stocklist)
+}
+#Momentum#
+{
+momentum_m<-momentumfun_m(y,stocklist)
+}
+#Size#
+{
+size_m<-sizefun_m(y,stocklist)
+}
+#Expectation
+{
+#Read in sub factors#
+{
+eroe_m<-eroefun_m(y,stocklist)
+eeps_m<-eepsfun_m(y,stocklist)
+pe_m<-pefun_m(y,stocklist)
+}
+}
+{#Optimization#
+{
+calgain<-function(variables,eroe,eeps,pe){
+  gain=eroe
+  gain[,-1]=variables[1]*(eroe[,-1])+variables[2]*(eeps[,-1])+variables[3]*(pe[,-1])
+  gain<-removeNA(gain)
+  gain
+}
+
+difference<-function(variables,eroe,eeps,pe,real){
+      diff<-sum(((real[,-1])-calgain(variables,eroe,eeps,pe)[,-1])^2)
+      diff<-removeNA(diff)
+      diff
+}
+variables<-c(1,1,1)
+optimresult<-optim(variables,difference,eroe=eroe_m[-nrow(eroe_m),],
+                   eeps=eeps_m[-nrow(eeps_m),],pe=pe_m[-nrow(pe_m),],real=gain_m[-1,])
+subweight<-optimresult$par
+}
+#Generate Earnings Yield#
+earningsyield<-calgain(subweight,eroe_m,eeps_m,pe_m)
+earningsyield_m<-standard_m(earningsyield)
+expectation_m<-earningsyield_m
+}
+
+
+
+```
+
+```{r}
+sizeweight_l<-sizeweight(stocklist)
+savedata("sizeweight_l")
+```
+
+```{r}
+save.image("C:/Users/shixi19/Desktop/FactorReport2_1.RData")
+```
+
+Read in Over
+# This chunk must be executed before porto decision
+```{r}
+regplot<-function(i){
+regdatafun<-function(i){
+      regdata<-data.frame(extragain=as.numeric(gain[i+1,-1])-(as.numeric(zcf1_CLOSE_p[i+1])/100),
+                          beta=as.numeric(beta[i,-1]),
+                          momentum=as.numeric(momentum[i,-1]),
+                          size=as.numeric(size[i,-1]),
+                          expectation=as.numeric(expectation[i,-1])
+      ,indus=factor(as.character(stock_industry[3,])))
+      return(regdata)
+}
+regdata<-regdatafun(i)
+full.model<-lm(extragain~.,data=regdata)
+# best.model<-step(full.model,direction="backward")
+# par(mfrow=c(2,2),mar=c(2,4,2,2))
+# plot(full.model)
+return(summary(full.model))
+}
+```
+
+
+# This chunk must be executed before porto decision
+```{r}
+residualgain<-matrix(0,(nrow(beta)-1),(ncol(beta)-1))
+{
+      t<-regplot(1)
+      betagain<-t$coefficients[1,1]
+      momentumgain<-t$coefficients[2,1]
+      sizegain<-t$coefficients[3,1]
+      expectationgain<-t$coefficients[4,1]
+      residualgain[1,]<-t$residuals
+      
+      betat<-t$coefficients[1,3]
+      momentumt<-t$coefficients[2,3]
+      sizet<-t$coefficients[3,3]
+      expectationt<-t$coefficients[4,3]
+      
+}
+for(i in 2:(nrow(beta)-1)){
+      t<-regplot(i)
+      betagain<-c(betagain,t$coefficients[1,1])
+      momentumgain<-c(momentumgain,t$coefficients[2,1])
+      sizegain<-c(sizegain,t$coefficients[3,1])
+      expectationgain<-c(expectationgain,t$coefficients[4,1])
+      residualgain[i,]<-t$residuals
+      
+      betat<-c(betat,t$coefficients[1,3])
+      momentumt<-c(momentumt,t$coefficients[2,3])
+      sizet<-c(sizet,t$coefficients[3,3])
+      expectationt<-c(expectationt,t$coefficients[4,3])
+}
+cordata<-data.frame(beta=betagain,momentum=momentumgain,size=sizegain,exp=expectationgain)
+cor(cordata)
+```
+calculate the risk
+```{r}
+covmatrix<-cov(cordata)
+
+```
+#Decide the changing porto date,not used by far,used after get porto weight
+```{r}
+factor_actual<-matrix(0,(nrow(growth)-4),4)
+ factor_actual[i,]<-inequalcon_real(testmulti_final[i,])#actual beta
+```
+
+just test the porto for the first time
+```{r}
+
+temp<-rbind(sizeweight_l,stock_industry)
+indusweight<-temp
+
+library(parallel)
+library(foreach)
+library(doParallel)
+library(truncnorm)
+library(Rsolnp)
+
+tindex<-as.numeric(tapply(as.numeric(indusweight[1,]),as.character(indusweight[4,]),sum))
+getporto_final<-function(i){
+      library(truncnorm)
+      library(Rsolnp)
+         gainfun<-function(w){
+               if(i==3){
+                     startdate_risk<-plotdate[1]
+               }else{
+                     startdate_risk<-monthdate[i-3]
+               }
+            -(as.numeric(0.2*w%*%as.numeric(gain_m[i-2,-1])+0.3*w%*%as.numeric(gain_m[i-1,-1])+0.5*w%*%as.numeric(gain_m[i,-1]))-(0.5*zcf1_CLOSE_p_m[i]/100+0.3*zcf1_CLOSE_p_m[i-1]/100+0.2*zcf1_CLOSE_p_m[i-2]/100))+7.5*getrisk(startdate_risk,monthdate[i],w)#Lambda=7.5
+      }
+      equalcon<-function(w){
+           sum(w)
+      }
+      inequalcon<-function(w){
+            a<-0.5*((as.numeric((w-sizeweight_l)%*%as.numeric(beta_m[i,-1])))/(sqrt(sizeweight_l%*%(as.numeric(beta_m[i,-1])^2))))+0.3*((as.numeric((w-sizeweight_l)%*%as.numeric(beta_m[i-1,-1])))/(sqrt(sizeweight_l%*%(as.numeric(beta_m[i-1,-1])^2))))+0.2*((as.numeric((w-sizeweight_l)%*%as.numeric(beta_m[i-2,-1])))/(sqrt(sizeweight_l%*%(as.numeric(beta_m[i-2,-1])^2))))
+            b<-0.5*((as.numeric((w-sizeweight_l)%*%as.numeric(momentum_m[i,-1])))/(sqrt(sizeweight_l%*%(as.numeric(momentum_m[i,-1])^2))))+0.3*((as.numeric((w-sizeweight_l)%*%as.numeric(momentum_m[i-1,-1])))/(sqrt(sizeweight_l%*%(as.numeric(momentum_m[i-1,-1])^2))))+0.2*((as.numeric((w-sizeweight_l)%*%as.numeric(momentum_m[i-2,-1])))/(sqrt(sizeweight_l%*%(as.numeric(momentum_m[i-2,-1])^2))))
+            c<-0.5*((as.numeric((w-sizeweight_l)%*%as.numeric(size_m[i,-1])))/(sqrt(sizeweight_l%*%(as.numeric(size_m[i,-1])^2))))+0.3*((as.numeric((w-sizeweight_l)%*%as.numeric(size_m[i-1,-1])))/(sqrt(sizeweight_l%*%(as.numeric(size_m[i-1,-1])^2))))+0.2*((as.numeric((w-sizeweight_l)%*%as.numeric(size_m[i-2,-1])))/(sqrt(sizeweight_l%*%(as.numeric(size_m[i-2,-1])^2))))
+            d<-0.5*((as.numeric((w-sizeweight_l)%*%as.numeric(earningsyield_m[i,-1])))/(sqrt(sizeweight_l%*%(as.numeric(earningsyield_m[i,-1])^2))))+0.3*((as.numeric((w-sizeweight_l)%*%as.numeric(earningsyield_m[i-1,-1])))/(sqrt(sizeweight_l%*%(as.numeric(earningsyield_m[i-1,-1])^2))))+0.2*((as.numeric((w-sizeweight_l)%*%as.numeric(earningsyield_m[i-2,-1])))/(sqrt(sizeweight_l%*%(as.numeric(earningsyield_m[i-2,-1])^2))))
+            
+            a<-removeNA(a)
+            b<-removeNA(b)
+            c<-removeNA(c)
+            d<-removeNA(d)
+#             tt<-rbind(as.numeric(w),indusweight[4,])
+#             treal<-as.numeric(tapply(as.numeric(tt[1,]),as.character(tt[2,]),sum))
+#             v2<-sum(abs(treal-tindex))/2
+#             return(c(a,b,c,d,v2))
+            return(c(a,b,c,d))
+      }
+      portofolio<-solnp(pars=sizeweight_l,fun=gainfun
+                        ,eqfun=equalcon,eqB=1,ineqfun=inequalcon
+                        ,ineqLB=(c(-0.1,-0.1,-0.1,-1))
+                        ,ineqUB=(c(0.1,0.1,0.1,1)),
+                        LB=rep(0,num.stock),UB=rep(0.1,num.stock))##Means we cannot put more than 10 percent weight on one single stock  
+write.csv(portofolio$par,file=paste0("C:\\Users\\shixi19\\Desktop\\FactorData2\\",as.character(i),".csv"))#leave some track after each time
+      return(portofolio$par)
+}
+cl <- makeCluster(4)
+registerDoParallel(cl)
+#testmulti_final<- foreach(x=3:33,.combine='rbind') %dopar% getporto_final(x)
+#31 failed!
+testmulti_final<- foreach(x=3:30,.combine='rbind') %dopar% getporto_final(x)
+stopCluster(cl)
+
+
+library(ggplot2)
+lookback<-function(w){
+      n<-nrow(w)
+      performance<-matrix(1,n+1,1)
+      for(i in 1:n){
+            w1<-w[i,]
+            performance[i+1]<-performance[i]*(1+w1%*%as.numeric(gain_m[i+3,-1])-zcf1_CLOSE_p_m[i+3]/100)
+      }
+      x<-size_m[3:(n+3),1]
+      qplot(x,performance,geom="line")
+}
+lookback(testmulti_final)
+```
+
+
+#risk model is here!
+```{r}
+##Use the EWMA method(page 13 of 37 on the gtja report)
+lambda<-function(tao){
+      lambda<-0.5^(1/tao)
+      return(lambda)
+}
+# CalCov<-function(d1,d2){
+#       i1<-grep(d1,plotdate)
+#       i2<-grep(d2,plotdate)
+#       tempbeta<-betagain[i1:i2]
+#       tempmom<-momentumgain[i1:i2]
+#       tempsize<-sizegain[i1:i2]
+#       tempexp<-expectationgain[i1:i2]
+#       abeta<-mean(tempbeta)
+#       amom<-mean(tempmom)
+#       asize<-mean(tempsize)
+#       aexp<-mean(tempexp)
+#       sumfenzi<-0
+#       sumfenmu<-0
+#       for(i in 1:as.numeric(d2-d1)){
+#             sumfenzi<-sumfenzi+lambda(as.numeric(d2-d1)-i+1)*(tempbeta[i]-abeta)
+#       }
+# }
+getdatareadyforcov<-function(d1,d2){
+      i1<-grep(d1,plotdate)
+      i2<-grep(d2,plotdate)
+      tempbeta<-betagain[i1:i2]
+      tempmom<-momentumgain[i1:i2]
+      tempsize<-sizegain[i1:i2]
+      tempexp<-expectationgain[i1:i2]
+      covdata<-data.frame(beta=tempbeta,momentum=tempmom,size=tempsize,expectation=tempexp)
+      return(covdata)
+}
+getrisk<-function(d1,d2,w){
+i1<-grep(d1,plotdate)
+i2<-grep(d2,plotdate)
+      #Common Risk
+covf<-cov(getdatareadyforcov(d1,d2))
+covf<-rbind(as.numeric(covf[1,]),as.numeric(covf[2,]),as.numeric(covf[3,]),as.numeric(covf[4,]))
+x<-rbind(as.numeric(beta[i2,-1]),as.numeric(momentum[i2,-1]),as.numeric(size[i2,-1]),as.numeric(expectation[i2,-1]))
+#Special risk
+tempresidual<-residualgain[i1:i2,]
+tempresi<-diag(var(tempresidual))
+resi<-matrix(0,length(tempresi),length(tempresi))
+diag(resi)<-tempresi
+risk<-t(w)%*%(t(x)%*%covf%*%x+resi)%*%w
+return(sqrt(risk))
+}#Get the risk of porto in d2, d1 is the day start to calculate risk
+
+```
